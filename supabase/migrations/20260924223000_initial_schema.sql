@@ -1,6 +1,4 @@
--- Series Tracker: ejecutar entero en Supabase → SQL Editor. Es idempotente.
--- Ruta sin CLI (para quien no quiera instalar la Supabase CLI). Si usas la CLI, aplica
--- supabase/migrations/ en su lugar (supabase db push) — mantén ambos en sync a mano.
+-- Series Tracker: esquema inicial (user_settings, watchlist, episodes_found).
 
 -- Un registro por usuario: sus providers (JSON) y el token secreto de su feed RSS.
 create table if not exists public.user_settings (
@@ -52,23 +50,6 @@ create policy "own watchlist" on public.watchlist
 drop policy if exists "read own episodes" on public.episodes_found;
 create policy "read own episodes" on public.episodes_found
   for select to authenticated using (auth.uid() = user_id);
-
--- Grupos de orden de visionado (playlists). Ver docs/superpowers/specs/2026-09-25-watch-order-groups-design.md
-create table if not exists public.groups (
-  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  id         text not null,               -- generado en el cliente (crypto.randomUUID())
-  name       text not null,
-  steps      jsonb not null default '[]'::jsonb,
-  deleted    boolean not null default false,
-  updated_at timestamptz not null default now(),
-  primary key (user_id, id)
-);
-
-alter table public.groups enable row level security;
-
-drop policy if exists "own groups" on public.groups;
-create policy "own groups" on public.groups
-  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- Bucket público donde el cron publica los feeds. Sin política de listado: solo se accede
 -- conociendo la URL completa (que incluye el feed_token secreto).
