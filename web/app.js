@@ -3,6 +3,7 @@ import * as engine from "../extension/engine.js";
 import { get, set } from "../extension/store.js";
 import { live, add, mutate } from "../extension/list.js";
 import { signIn, signUp, signOut, getSession, syncNow } from "../extension/sync.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const $ = s => document.querySelector(s);
 const el = (tag, props = {}, ...kids) => {
@@ -100,15 +101,8 @@ async function showMain() {
 }
 
 async function showAuth() {
-  const cfg = await get("supabase", {});
-  $("#sbUrl").value = cfg.url || "";
-  $("#sbKey").value = cfg.anonKey || "";
   $("#mainView").hidden = true;
   $("#authView").hidden = false;
-}
-
-async function saveCfg() {
-  await set("supabase", { url: $("#sbUrl").value.trim().replace(/\/+$/, ""), anonKey: $("#sbKey").value.trim() });
 }
 
 async function authFlow(fn) {
@@ -116,7 +110,6 @@ async function authFlow(fn) {
   if (!email || !password) { $("#authMsg").textContent = "Escribe email y contraseña"; return; }
   $("#authMsg").textContent = "";
   try {
-    await saveCfg();
     const note = await fn(email, password);
     if (note) { $("#authMsg").textContent = note; return; }
     await showMain();
@@ -157,6 +150,7 @@ $("#copyFeed").onclick = async () => {
 
 (async function init() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  await set("supabase", { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
   const s = await getSession();
   if (s) await showMain(); else await showAuth();
 })();
