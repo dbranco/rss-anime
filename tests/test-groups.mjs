@@ -47,4 +47,45 @@ assert.equal(cur2.item, undefined);
 assert.equal(cur2.next, 1);
 
 console.log("currentStep OK");
+
+// --- CRUD (con chrome.storage.local falso, mismo patrón que test-sync-cron.mjs) ---
+const data = {};
+globalThis.chrome = { storage: { local: {
+  get: async k => (k in data ? { [k]: structuredClone(data[k]) } : {}),
+  set: async o => { Object.assign(data, structuredClone(o)); }
+} } };
+const { get } = await import("../extension/store.js");
+const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, live: liveGroups } =
+  await import("../extension/groups.js");
+
+const g = await addGroup("Star Wars cronológico");
+assert.equal(liveGroups(await get("groups", [])).length, 1);
+assert.equal(g.steps.length, 0);
+
+await addStep(g.id, { provider: "imdb", slug: "sw4" });
+await addStep(g.id, { provider: "imdb", slug: "sw5" });
+await addStep(g.id, { provider: "animeav1", slug: "clone-wars", from: 1, to: 20 });
+let groups = await get("groups", []);
+assert.equal(groups[0].steps.length, 3);
+assert.deepEqual(groups[0].steps[0], { provider: "imdb", slug: "sw4", from: 1, to: 1, exclude: [] });
+
+await moveStep(g.id, 0, 1); // sw4 <-> sw5
+groups = await get("groups", []);
+assert.equal(groups[0].steps[0].slug, "sw5");
+assert.equal(groups[0].steps[1].slug, "sw4");
+
+await removeStep(g.id, 2); // quita clone-wars
+groups = await get("groups", []);
+assert.equal(groups[0].steps.length, 2);
+
+await renameGroup(g.id, "SW orden cronológico");
+groups = await get("groups", []);
+assert.equal(groups[0].name, "SW orden cronológico");
+
+await removeGroup(g.id);
+groups = await get("groups", []);
+assert.equal(liveGroups(groups).length, 0); // borrado lógico, sigue en storage
+assert.equal(groups.length, 1);
+
+console.log("CRUD OK");
 console.log("TODO OK");
