@@ -39,6 +39,7 @@ async function sync(quiet = true) {
     $("#cloud").textContent = "✓";
     await fillProviders();
     renderList();
+    if (!$("#groupsView").hidden) renderGroups();
     if (!quiet) msg("Sincronizado");
   } catch (e) {
     $("#cloud").textContent = "⚠";
@@ -150,18 +151,26 @@ async function renderGroups() {
           el("div", { textContent:
             `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
             `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
-          cur.item ? "" : el("div", { className: "st",
-            textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
-          el("div", { className: "actions" },
-            btn("Siguiente", async () => {
-              const p = prov(cur.step.provider);
-              st.textContent = "Comprobando…";
-              try {
-                const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
-                st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
-              } catch (e) { st.textContent = "Error: " + explain(e); }
-            }),
-            btn("Visto", async () => { await groups.markStepSeen(g, watchlist); renderGroups(); sync(); })),
+          cur.item
+            ? el("div", { className: "actions" },
+                btn("Siguiente", async () => {
+                  const p = prov(cur.step.provider);
+                  st.textContent = "Comprobando…";
+                  try {
+                    const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
+                    st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
+                  } catch (e) { st.textContent = "Error: " + explain(e); }
+                }),
+                btn("Visto", async () => {
+                  const it = await groups.markStepSeen(g, watchlist);
+                  if (it) {
+                    const news = await get("news", []);
+                    await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+                  }
+                  renderGroups(); sync();
+                }))
+            : el("div", { className: "st",
+                textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
           st);
     return el("div", { className: "card" },
       el("div", { className: "body" },
@@ -183,6 +192,8 @@ let draftSteps = [];
 $("#newGroup").onclick = async () => {
   draftSteps = [];
   $("#groupName").value = "";
+  $("#stepFrom").value = "1";
+  $("#stepTo").value = "1";
   $("#stepExclude").value = "";
   renderDraftSteps();
   const items = live(await get("watchlist", []));
@@ -209,6 +220,8 @@ $("#addStepBtn").onclick = () => {
   const to = +$("#stepTo").value || 1;
   const exclude = $("#stepExclude").value.split(",").map(s => +s.trim()).filter(Boolean);
   draftSteps.push({ provider, slug, from, to, exclude });
+  $("#stepFrom").value = "1";
+  $("#stepTo").value = "1";
   $("#stepExclude").value = "";
   renderDraftSteps();
 };

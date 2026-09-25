@@ -15,7 +15,7 @@ export function nextNeeded(step, last) {
 }
 
 export function currentStep(group, watchlist) {
-  for (const step of group.steps) {
+  for (const step of group.steps || []) {
     const item = watchlist.find(w => w.provider === step.provider && w.slug === step.slug);
     const last = item?.last || 0;
     const next = nextNeeded(step, last);
@@ -64,5 +64,7 @@ export function moveStep(id, index, dir) {
 export async function markStepSeen(group, watchlist) {
   const cur = currentStep(group, watchlist);
   if (!cur) return null;
-  return mutate(cur.step.provider, cur.step.slug, x => { x.last = cur.next; });
+  // Monotónico: `cur.next` puede venir de un watchlist ya obsoleto (otra pestaña o dispositivo
+  // pudo avanzar el `last` entretanto), así que nunca lo movemos hacia atrás.
+  return mutate(cur.step.provider, cur.step.slug, x => { x.last = Math.max(x.last || 0, cur.next); });
 }

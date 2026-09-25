@@ -95,6 +95,7 @@ async function checkGroups() {
   for (const g of groups) {
     const cur = currentStep(g, watchlist);
     if (!cur?.next) continue;
+    if (!cur.item) continue; // paso colgando: el ítem se borró de la lista (la UI ya lo avisa)
     const p = providers.find(x => x.id === cur.step.provider);
     if (!p) continue;
     let r;

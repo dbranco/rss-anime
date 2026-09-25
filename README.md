@@ -13,7 +13,9 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 
 ## 1. Supabase
 1. Crea un proyecto (plan gratuito; los proyectos inactivos se pausan, compruébalo en su web).
-2. SQL Editor → pega y ejecuta `supabase/schema.sql`.
+2. SQL Editor → pega y ejecuta `supabase/schema.sql`. Alternativa con la CLI de Supabase: las mismas
+   tablas están en `supabase/migrations/`, así que `supabase db push` las aplica (y aplica también las
+   nuevas al actualizar, sin volver a pegar SQL a mano).
 3. Authentication → Providers → Email activo. Si "Confirm email" está activado, tendrás que confirmar el
    correo tras crear la cuenta; para uso personal puedes desactivarlo.
 4. Settings → API: copia la URL, la clave `anon` (va en la extensión) y la `service_role` (SOLO para el cron).
@@ -26,6 +28,13 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 4. Opciones muestra la URL de tu feed RSS cuando el cron ya lo ha generado.
 
 Conflictos: gana el cambio más reciente (`updated_at`). Los borrados se propagan (`deleted`).
+
+### Grupos
+La pestaña "Grupos" (popup y PWA) son playlists de orden de visionado: reordenan y filtran ítems que ya
+tienes en tu lista, cada paso con su rango `desde`/`hasta` y episodios a excluir (fillers). El progreso
+sale del mismo "visto hasta" de cada ítem, no hay contador aparte. Se sincronizan igual que la lista, y
+tanto las notificaciones como el feed RSS avisan del episodio que el grupo necesita a continuación. En
+esta versión los grupos se crean y se borran; para cambiar uno, bórralo y créalo de nuevo.
 
 ## 3. Cron / RSS
 Necesita Node 20+ (`npm install`).
@@ -45,7 +54,8 @@ Necesita Node 20+ (`npm install`).
 
 ## Pruebas
 `npm install && bash tests/run.sh` levanta una web falsa y un Supabase falso y prueba: motor, sincronización
-entre dos "máquinas" (subida, bajada, progreso, borrado y restauración) y cron (feed sin duplicados).
+entre dos "máquinas" (subida, bajada, progreso, borrado y restauración), grupos (`tests/test-groups.mjs`:
+paso actual, exclusiones, CRUD) y cron (feed sin duplicados).
 No cubre el popup ni las notificaciones en un Chromium real.
 
 ## Límites

@@ -93,9 +93,13 @@ for (const st of settings) {
     for (const g of myGroups) {
       const cur = currentStep(g, mineForGroups);
       if (!cur?.next) continue;
+      if (!cur.item) continue; // paso colgando: el ítem ya no está en la lista
       const p = providers.find(x => x.id === cur.step.provider);
       if (!p) continue;
-      const already = known.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next);
+      // Dedupe contra pasadas anteriores (`known`) y contra lo que el bucle por ítem ya ha
+      // encolado en esta misma pasada (`fresh`): comparten clave primaria y guid del RSS.
+      const already = known.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next)
+        || fresh.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next);
       if (already) continue;
       let r;
       try { r = await engine.checkEpisode(p, cur.step.slug, cur.next); }

@@ -9,7 +9,11 @@ Este documento diseña **grupos**: una capa que reordena y filtra ítems que el 
 ## Alcance
 
 Dentro:
-- Crear/editar/borrar grupos con una secuencia ordenada de pasos.
+- Crear y borrar grupos con una secuencia ordenada de pasos. En v1 **no hay UI para editar un grupo
+  ya guardado** (ni su nombre ni sus pasos): las funciones `renameGroup`/`removeStep`/`moveStep` existen
+  en `extension/groups.js` para una futura UI, pero hoy no están conectadas a ningún botón. Los botones
+  ↑↓/✕ por paso solo actúan sobre el borrador mientras creas el grupo. Para "editar" un grupo guardado
+  se borra y se vuelve a crear.
 - Cada paso referencia un ítem ya existente en `watchlist` (por `provider`+`slug`) y un rango de episodios `[from, to]` con exclusiones opcionales.
 - El progreso del grupo se deriva del campo `last` de cada ítem (no hay contador de progreso aparte); marcar "visto" desde el grupo actualiza el mismo `last` que usa el resto de la app.
 - Sincronización entre dispositivos vía Supabase, igual que `watchlist`.
