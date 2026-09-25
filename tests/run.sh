@@ -6,4 +6,5 @@ python3 tests/mock_supabase.py & P2=$!
 trap 'kill $P1 $P2 2>/dev/null' EXIT
 sleep 1
 node tests/test-engine.mjs
+node tests/test-groups.mjs
 node tests/test-sync-cron.mjs
