@@ -8,7 +8,16 @@ const node = (el, sel) => (!sel || sel === "self" ? el : el.querySelector(sel));
 const abs = (href, base) => new URL(href, base).href;
 const clean = t => (t || "").replace(/\s+/g, " ").trim();
 
+// Gancho opcional: la PWA lo define (proxy vía Edge Function) porque, a diferencia de la extensión
+// (host_permissions exime de CORS) o el cron (fetch servidor-a-servidor), un fetch() de un sitio web
+// normal a un provider de terceros sin cabeceras CORS se bloquea en el navegador. Extensión y cron
+// nunca lo definen, así que su comportamiento no cambia.
 async function fetchHtml(p, url) {
+  if (typeof globalThis.__seriesTrackerFetch === "function") {
+    const r = await globalThis.__seriesTrackerFetch(url);
+    if (p.delay) await sleep(p.delay * 1000);
+    return r;
+  }
   const r = await fetch(url, { credentials: "include" });
   const html = await r.text();
   if (p.delay) await sleep(p.delay * 1000); // cortesía con el servidor

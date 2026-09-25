@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111">
+<title>Series Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon48.png">
+<link rel="apple-touch-icon" href="icons/icon128.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Series Tracker</h1>
+  <span id="cloud"></span>
+</header>
+
+<main>
+  <section id="authView" hidden>
+    <h2>Supabase</h2>
+    <p class="hint">La misma URL y clave <code>anon</code>/publishable que pegaste en Opciones de la extensión.</p>
+    <input id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+    <input id="sbKey" placeholder="clave anon / publishable" autocomplete="off">
+    <div class="row"><input id="email" type="email" placeholder="email" autocomplete="username">
+      <input id="password" type="password" placeholder="contraseña" autocomplete="current-password"></div>
+    <div class="row">
+      <button id="login">Iniciar sesión</button>
+      <button id="signup">Crear cuenta</button>
+    </div>
+    <p id="authMsg" class="msg"></p>
+  </section>
+
+  <section id="mainView" hidden>
+    <div class="row between">
+      <span id="who"></span>
+      <button id="logout" class="link">Cerrar sesión</button>
+    </div>
+
+    <h2>Buscar</h2>
+    <div class="row"><select id="prov"></select></div>
+    <div class="row"><input id="q" placeholder="Re:Zero"><button id="go">Buscar</button></div>
+    <p id="searchMsg" class="msg"></p>
+    <div id="results"></div>
+
+    <h2>Mi lista <button id="all" class="small">Comprobar todos</button></h2>
+    <div id="list"></div>
+
+    <h2>Feed RSS</h2>
+    <p class="hint">Lo genera el cron. Añádelo a tu lector RSS del móvil.</p>
+    <div id="feedBox" class="row"><input id="feedUrl" readonly><button id="copyFeed" class="small">Copiar</button></div>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
