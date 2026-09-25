@@ -132,9 +132,35 @@ async function syncWatchlist(uid) {
   if (JSON.stringify(await get("watchlist", [])) === snapshot) await set("watchlist", [...merged.values()]);
 }
 
+async function syncGroups(uid) {
+  const remote = (await rest(`groups?select=*&user_id=eq.${uid}`)).map(r => ({
+    id: r.id, name: r.name, steps: r.steps, deleted: r.deleted, updated_at: r.updated_at
+  }));
+  const local = await get("groups", []);
+  const snapshot = JSON.stringify(local);
+  const key = x => x.id;
+  const merged = new Map(remote.map(x => [key(x), x]));
+  const toPush = [];
+  for (const l of local) {
+    if (!l.updated_at) l.updated_at = now();
+    const r = merged.get(key(l));
+    if (!r || ts(l.updated_at) > ts(r.updated_at)) { merged.set(key(l), l); toPush.push(l); }
+  }
+  if (toPush.length) {
+    await rest("groups?on_conflict=user_id,id", {
+      method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+      body: toPush.map(x => ({
+        user_id: uid, id: x.id, name: x.name, steps: x.steps, deleted: !!x.deleted, updated_at: x.updated_at
+      }))
+    });
+  }
+  if (JSON.stringify(await get("groups", [])) === snapshot) await set("groups", [...merged.values()]);
+}
+
 export async function syncNow() {
   const s = await session();
   await syncSettings(s.user.id);
   await syncWatchlist(s.user.id);
+  await syncGroups(s.user.id);
   await set("last_sync", now());
 }

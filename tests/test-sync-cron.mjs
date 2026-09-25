@@ -30,6 +30,13 @@ await add({ provider: "mock", slug: "re-zero", title: "Re:Zero", link: "http://1
 await syncNow();
 console.log("A subió providers y lista");
 
+// A crea un grupo con un paso
+const { addGroup, addStep, live: liveGroups } = await import("../extension/groups.js");
+const grupo = await addGroup("Mi maratón");
+await addStep(grupo.id, { provider: "mock", slug: "re-zero", from: 1, to: 3 });
+await syncNow();
+console.log("A subió un grupo");
+
 // Máquina B: inicia sesión y debe recibir todo
 use(B);
 await set("supabase", { url: SB, anonKey: "anon" });
@@ -38,7 +45,11 @@ await syncNow();
 assert.equal((await get("providers", [])).length, 1);
 assert.equal(live(await get("watchlist", [])).length, 1);
 assert.ok(await get("feed_token"));
-console.log("B recibió providers, lista y feed_token");
+const groupsB = liveGroups(await get("groups", []));
+assert.equal(groupsB.length, 1);
+assert.equal(groupsB[0].name, "Mi maratón");
+assert.equal(groupsB[0].steps[0].to, 3);
+console.log("B recibió el grupo");
 
 // B marca visto hasta el ep 1 → A lo recibe
 await mutate("mock", "re-zero", it => { it.last = 1; });
@@ -59,6 +70,19 @@ const back = live(await get("watchlist", []));
 assert.equal(back.length, 1);
 assert.equal(back[0].last, 1, "el progreso se conserva al volver a añadir");
 console.log("borrado y restauración propagados");
+
+// B renombra el grupo → A lo recibe; luego A lo borra → B lo ve borrado
+use(B);
+const { renameGroup, removeGroup } = await import("../extension/groups.js");
+await renameGroup(grupo.id, "Maratón definitivo");
+await syncNow();
+use(A); await syncNow();
+assert.equal((await get("groups", []))[0].name, "Maratón definitivo");
+await removeGroup(grupo.id);
+await syncNow();
+use(B); await syncNow();
+assert.equal(liveGroups(await get("groups", [])).length, 0);
+console.log("grupo: edición y borrado propagados");
 
 // Cron: debe encontrar ep 2 y 3 (last=1), publicar el feed y no duplicar en la segunda pasada
 const env = { ...process.env, SUPABASE_URL: SB, SUPABASE_SERVICE_KEY: "service-key", SHOW_URL: "1" };
