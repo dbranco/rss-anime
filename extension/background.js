@@ -1,5 +1,6 @@
 import { get, set } from "./store.js";
 import { live } from "./list.js";
+import { live as liveGroups, currentStep } from "./groups.js";
 import { syncNow, getSession } from "./sync.js";
 
 const ALARM = "check";
@@ -84,6 +85,37 @@ async function checkAll() {
   await set("notified", notified.slice(-500));
 }
 
+async function checkGroups() {
+  const groups = liveGroups(await get("groups", []));
+  if (!groups.length) return;
+  const watchlist = live(await get("watchlist", []));
+  const providers = await get("providers", []);
+  const news = await get("news", []);
+  const notified = await get("notified", []);
+  for (const g of groups) {
+    const cur = currentStep(g, watchlist);
+    if (!cur?.next) continue;
+    const p = providers.find(x => x.id === cur.step.provider);
+    if (!p) continue;
+    let r;
+    try { r = await callOffscreen("checkEpisode", p, cur.step.slug, cur.next); }
+    catch (e) { console.warn(`Fallo en grupo ${g.name}:`, e); continue; }
+    if (!r.exists) continue;
+    const id = `group-${g.id}-e${cur.next}`;
+    if (notified.includes(id)) continue;
+    notified.push(id);
+    const title = cur.item?.title || cur.step.slug;
+    news.unshift({ id, provider: cur.step.provider, slug: cur.step.slug, episode: cur.next,
+                   title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
+    chrome.notifications.create(id, {
+      type: "basic", iconUrl: "icons/icon128.png",
+      title: "Nuevo episodio (grupo)", message: `${g.name}: ${title} — episodio ${cur.next}`
+    });
+  }
+  await set("news", news.slice(0, NEWS_CAP));
+  await set("notified", notified.slice(-500));
+}
+
 // Sincroniza (si hay sesión) y luego comprueba episodios.
 async function run() {
   if (running) return;
@@ -91,6 +123,7 @@ async function run() {
   try {
     try { if (await getSession()) await requestSync(); } catch (e) { console.warn("Sync fallida:", e); }
     await checkAll();
+    await checkGroups();
   } finally { running = false; }
 }
 
