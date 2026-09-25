@@ -50,6 +50,21 @@
 <div id="groupsView" hidden>
   <div id="groups"></div>
   <button id="newGroup">＋ Nuevo grupo</button>
+  <div id="groupForm" hidden>
+    <input id="groupName" placeholder="Nombre del grupo" style="margin:6px 0">
+    <div id="groupSteps"></div>
+    <div class="row" style="margin-top:6px"><select id="stepItem"></select></div>
+    <div class="row" style="margin-top:6px">
+      <input id="stepFrom" type="number" min="1" value="1" placeholder="desde">
+      <input id="stepTo" type="number" min="1" value="1" placeholder="hasta">
+    </div>
+    <input id="stepExclude" placeholder="excluir (ej: 25, 30)" style="margin-top:6px">
+    <div class="row" style="margin-top:6px">
+      <button id="addStepBtn">＋ Añadir paso</button>
+      <button id="saveGroupBtn">Guardar</button>
+      <button id="cancelGroupBtn">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <p id="msg"></p>

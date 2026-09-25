@@ -178,4 +178,49 @@ $("#all").onclick = async () => {
   catch (e) { msg("Error: " + e.message); }
 };
 
+let draftSteps = [];
+
+$("#newGroup").onclick = async () => {
+  draftSteps = [];
+  $("#groupName").value = "";
+  $("#stepExclude").value = "";
+  renderDraftSteps();
+  const items = live(await get("watchlist", []));
+  $("#stepItem").replaceChildren(...items.map(it =>
+    el("option", { value: `${it.provider}|${it.slug}`, textContent: it.title })));
+  $("#groupForm").hidden = false;
+};
+
+$("#cancelGroupBtn").onclick = () => { $("#groupForm").hidden = true; };
+
+function renderDraftSteps() {
+  $("#groupSteps").replaceChildren(...draftSteps.map((s, i) => el("div", { className: "row" },
+    el("span", { textContent:
+      `${i + 1}. ${s.slug} (${s.from}-${s.to}${s.exclude.length ? ", excl " + s.exclude.join(",") : ""})` }),
+    btn("↑", () => { if (i > 0) { [draftSteps[i - 1], draftSteps[i]] = [draftSteps[i], draftSteps[i - 1]]; renderDraftSteps(); } }),
+    btn("↓", () => { if (i < draftSteps.length - 1) { [draftSteps[i + 1], draftSteps[i]] = [draftSteps[i], draftSteps[i + 1]]; renderDraftSteps(); } }),
+    btn("✕", () => { draftSteps.splice(i, 1); renderDraftSteps(); }))));
+}
+
+$("#addStepBtn").onclick = () => {
+  const [provider, slug] = ($("#stepItem").value || "").split("|");
+  if (!provider) return;
+  const from = +$("#stepFrom").value || 1;
+  const to = +$("#stepTo").value || 1;
+  const exclude = $("#stepExclude").value.split(",").map(s => +s.trim()).filter(Boolean);
+  draftSteps.push({ provider, slug, from, to, exclude });
+  $("#stepExclude").value = "";
+  renderDraftSteps();
+};
+
+$("#saveGroupBtn").onclick = async () => {
+  const name = $("#groupName").value.trim();
+  if (!name || !draftSteps.length) { msg("Ponle nombre y al menos un paso"); return; }
+  const g = await groups.addGroup(name);
+  for (const s of draftSteps) await groups.addStep(g.id, s);
+  $("#groupForm").hidden = true;
+  renderGroups();
+  sync();
+};
+
 init();
