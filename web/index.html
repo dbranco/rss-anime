@@ -41,8 +41,20 @@
     <p id="searchMsg" class="msg"></p>
     <div id="results"></div>
 
-    <h2>Mi lista <button id="all" class="small">Comprobar todos</button></h2>
-    <div id="list"></div>
+    <div class="tabs">
+      <button id="tabAll" class="active">Todo</button>
+      <button id="tabGroups">Grupos</button>
+    </div>
+
+    <div id="allView">
+      <h2>Mi lista <button id="all" class="small">Comprobar todos</button></h2>
+      <div id="list"></div>
+    </div>
+
+    <div id="groupsView" hidden>
+      <div id="groups"></div>
+      <button id="newGroup" class="small">＋ Nuevo grupo</button>
+    </div>
 
     <h2>Feed RSS</h2>
     <p class="hint">Lo genera el cron. Añádelo a tu lector RSS del móvil.</p>

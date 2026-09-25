@@ -38,3 +38,6 @@ button.link { width: auto; background: none; border: none; text-decoration: unde
 .eps { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; max-height: 110px; overflow: auto; }
 .eps a { padding: 2px 7px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; text-decoration: none; color: inherit; }
 #feedUrl { font-size: .8rem; }
+.tabs { display: flex; gap: 6px; margin: 10px 0; }
+.tabs button { flex: 1; }
+.tabs button.active { background: color-mix(in srgb, currentColor 15%, transparent); font-weight: bold; }
