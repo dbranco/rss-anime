@@ -1,6 +1,7 @@
 import * as engine from "./engine.js";
 import { get, set } from "./store.js";
 import { live, add, mutate } from "./list.js";
+import * as groups from "./groups.js";
 import { getSession } from "./sync.js";
 import { requestSync } from "./syncClient.js";
 
@@ -53,6 +54,17 @@ async function init() {
   renderNews();
   renderList();
   sync();
+}
+
+$("#tabAll").onclick = () => setView("all");
+$("#tabGroups").onclick = () => setView("groups");
+
+function setView(v) {
+  $("#allView").hidden = v !== "all";
+  $("#groupsView").hidden = v !== "groups";
+  $("#tabAll").classList.toggle("active", v === "all");
+  $("#tabGroups").classList.toggle("active", v === "groups");
+  if (v === "groups") renderGroups();
 }
 
 async function renderNews() {
@@ -123,6 +135,40 @@ async function renderList() {
           btn("Visto +1", () => markSeen(item)),
           btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderList(); sync(); })),
         st, eps));
+  }));
+}
+
+async function renderGroups() {
+  const list = groups.live(await get("groups", []));
+  const watchlist = live(await get("watchlist", []));
+  $("#groups").replaceChildren(...list.map(g => {
+    const cur = groups.currentStep(g, watchlist);
+    const st = el("div", { className: "st" });
+    const body = !cur
+      ? el("div", { textContent: "✓ Terminado" })
+      : el("div", {},
+          el("div", { textContent:
+            `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
+            `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
+          cur.item ? "" : el("div", { className: "st",
+            textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
+          el("div", { className: "actions" },
+            btn("Siguiente", async () => {
+              const p = prov(cur.step.provider);
+              st.textContent = "Comprobando…";
+              try {
+                const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
+                st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
+              } catch (e) { st.textContent = "Error: " + explain(e); }
+            }),
+            btn("Visto", async () => { await groups.markStepSeen(g, watchlist); renderGroups(); sync(); })),
+          st);
+    return el("div", { className: "card" },
+      el("div", { className: "body" },
+        el("b", { textContent: g.name }),
+        body,
+        el("div", { className: "actions" },
+          btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderGroups(); sync(); }))));
   }));
 }
 
