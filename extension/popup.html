@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px system-ui, sans-serif; width: 380px; margin: 0; padding: 10px; }
+  h1 { font-size: 1.1rem; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  h2 { font-size: .95rem; margin: 14px 0 4px; }
+  .row { display: flex; gap: 6px; }
+  .row input { flex: 1; min-width: 0; }
+  input, select, button { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #8886; background: transparent; color: inherit; }
+  button { cursor: pointer; }
+  .card { display: flex; gap: 8px; padding: 8px; margin: 6px 0; border: 1px solid #8884; border-radius: 8px; }
+  .card img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; }
+  .body { flex: 1; min-width: 0; }
+  .actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .actions button { padding: 2px 6px; font-size: .8rem; }
+  .eps { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; max-height: 90px; overflow: auto; }
+  .eps a { padding: 1px 6px; border: 1px solid #8886; border-radius: 5px; text-decoration: none; }
+  .st { margin-top: 3px; font-size: .85rem; }
+  .news { display: flex; justify-content: space-between; gap: 6px; padding: 4px 0; }
+  #msg { color: #c60; min-height: 1.1em; margin: 6px 0 0; }
+  #cloud { font-size: .8rem; opacity: .7; }
+</style>
+</head>
+<body>
+<h1>Series Tracker <span><span id="cloud"></span> <button id="sync" title="Sincronizar con Supabase">☁</button> <button id="opts" title="Opciones">⚙</button></span></h1>
+
+<div id="newsBox" hidden><h2>Nuevos episodios</h2><div id="news"></div></div>
+
+<h2>Buscar</h2>
+<div class="row"><select id="prov"></select></div>
+<div class="row" style="margin-top:6px"><input id="q" placeholder="Re:Zero"><button id="go">Buscar</button></div>
+<div id="results"></div>
+
+<h2>Mi lista <button id="all">Comprobar todos</button></h2>
+<div id="list"></div>
+<p id="msg"></p>
+<script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "ejemplo",
+    "name": "Ejemplo (xyz.com)",
+    "base_url": "https://xyz.com",
+    "delay": 1,
+    "search": {
+      "url": "{base_url}/catalogo?search={query}",
+      "item": ".card",
+      "link": "a",
+      "title": ".card-title",
+      "image": "img",
+      "slug_regex": "/blabla/([^/]+)"
+    },
+    "series": {
+      "url": "{base_url}/blabla/{slug}",
+      "item": ".episodes li",
+      "link": "a",
+      "number_regex": "(\\d+)/?$"
+    },
+    "episode": {
+      "url": "{base_url}/blabla/{slug}/{episode}",
+      "exists_selector": "video, .player",
+      "not_found_text": ["no encontrado", "404"]
+    }
+  }
+]

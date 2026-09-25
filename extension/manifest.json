@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Series Tracker",
+  "version": "2.0.0",
+  "description": "Busca series en las webs que configures (providers), guarda tu lista, la sincroniza con Supabase y avisa cuando sale el siguiente episodio.",
+  "permissions": ["storage", "alarms", "notifications", "offscreen"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Series Tracker",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "options_page": "options.html",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+}
