@@ -92,7 +92,7 @@ const feedUrl = out.match(/Feed: (\S+)/)[1];
 let xml = await (await fetch(feedUrl)).text();
 assert.match(xml, /Re:Zero — episodio 2/);
 assert.match(xml, /Re:Zero — episodio 3/);
-assert.doesNotMatch(xml, /episodio 1</);
+assert.doesNotMatch(xml, /Re:Zero — episodio 1</);
 const count = s => (s.match(/<item>/g) || []).length;
 assert.equal(count(xml), 2);
 run();
@@ -100,4 +100,26 @@ xml = await (await fetch(feedUrl)).text();
 assert.equal(count(xml), 2, "sin duplicados en la segunda pasada");
 assert.match(feedUrl, new RegExp(await get("feed_token")));
 console.log("cron OK:", count(xml), "items; feed en la URL del feed_token");
+
+// Grupo: pide el episodio 20 de una serie larga que el chequeo normal (ventana de 5) no mira.
+// Se añade DESPUÉS del bloque anterior para no alterar su recuento (así el count==2 de arriba
+// sigue siendo válido: longrun todavía no existe en ese punto).
+use(A);
+await add({ provider: "mock", slug: "longrun", title: "Long Run", link: "x", image: null });
+const { addGroup: addGroup2, addStep: addStep2 } = await import("../extension/groups.js");
+const gLong = await addGroup2("Maratón larga");
+await addStep2(gLong.id, { provider: "mock", slug: "longrun", from: 20, to: 20 });
+await syncNow();
+
+run();
+xml = await (await fetch(feedUrl)).text();
+assert.match(xml, /Maratón larga: Long Run — episodio 20/);
+const countAfterGroup = count(xml);
+console.log("grupo: cron encontró el episodio 20 vía grupo,", countAfterGroup, "items en total");
+
+run();
+xml = await (await fetch(feedUrl)).text();
+assert.equal(count(xml), countAfterGroup, "sin duplicados en la segunda pasada del grupo");
+console.log("grupo: sin duplicados en la segunda pasada");
+
 console.log("TODO OK");

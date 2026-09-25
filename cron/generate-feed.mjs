@@ -11,6 +11,7 @@ import { JSDOM } from "jsdom";
 
 globalThis.DOMParser = new JSDOM("").window.DOMParser; // el motor necesita DOMParser
 const engine = await import("../extension/engine.js");
+const { currentStep } = await import("../extension/groups.js");
 
 const BASE = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -62,6 +63,7 @@ async function publish(token, xml) {
 const settings = await rest("user_settings?select=user_id,providers,feed_token");
 const watch = await rest("watchlist?select=*&deleted=eq.false");
 const found = await rest("episodes_found?select=*&order=found_at.desc");
+const groups = await rest("groups?select=*&deleted=eq.false");
 
 for (const st of settings) {
   try {
@@ -84,6 +86,25 @@ for (const st of settings) {
                      title: `${it.title} — episodio ${n}`, link: r.url });
         console.log(`Nuevo: ${it.title} ep ${n}`);
       }
+    }
+
+    const mineForGroups = mine.map(w => ({ provider: w.provider_id, slug: w.slug, last: w.last, title: w.title }));
+    const myGroups = groups.filter(g => g.user_id === st.user_id);
+    for (const g of myGroups) {
+      const cur = currentStep(g, mineForGroups);
+      if (!cur?.next) continue;
+      const p = providers.find(x => x.id === cur.step.provider);
+      if (!p) continue;
+      const already = known.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next);
+      if (already) continue;
+      let r;
+      try { r = await engine.checkEpisode(p, cur.step.slug, cur.next); }
+      catch (e) { console.warn(`Fallo en grupo ${g.name}: ${e.message}`); continue; }
+      if (!r.exists) continue;
+      const title = cur.item?.title || cur.step.slug;
+      fresh.push({ user_id: st.user_id, provider_id: cur.step.provider, slug: cur.step.slug, episode: cur.next,
+                   title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
+      console.log(`Nuevo (grupo ${g.name}): ${title} ep ${cur.next}`);
     }
 
     if (fresh.length) {

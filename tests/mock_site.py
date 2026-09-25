@@ -3,8 +3,12 @@ import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
-SERIES = {"re-zero": "Re:Zero", "frieren": "Frieren", "dandadan": "Dandadan"}
-EPS = 3
+SERIES = {
+    "re-zero": ("Re:Zero", 3),
+    "frieren": ("Frieren", 3),
+    "dandadan": ("Dandadan", 3),
+    "longrun": ("Long Run", 30),
+}
 
 
 class H(BaseHTTPRequestHandler):
@@ -22,14 +26,14 @@ class H(BaseHTTPRequestHandler):
             q = parse_qs(u.query).get("search", [""])[0].lower()
             cards = "".join(
                 f'<div class="card"><a href="/blabla/{s}"><img src="/img/{s}.jpg"><span class="card-title">{n}</span></a></div>'
-                for s, n in SERIES.items() if q in n.lower())
+                for s, (n, _) in SERIES.items() if q in n.lower())
             return self._send(200, f"<html><body>{cards}</body></html>")
         m = re.fullmatch(r"/blabla/([\w-]+)", u.path)
         if m and m[1] in SERIES:
-            eps = "".join(f'<a href="/blabla/{m[1]}/{i}">Episodio {i}</a>' for i in range(1, EPS + 1))
+            eps = "".join(f'<a href="/blabla/{m[1]}/{i}">Episodio {i}</a>' for i in range(1, SERIES[m[1]][1] + 1))
             return self._send(200, f"<html><body><div class='episodes'>{eps}</div></body></html>")
         m = re.fullmatch(r"/blabla/([\w-]+)/(\d+)", u.path)
-        if m and m[1] in SERIES and int(m[2]) <= EPS:
+        if m and m[1] in SERIES and int(m[2]) <= SERIES[m[1]][1]:
             return self._send(200, "<html><body><video src='x.mp4'></video></body></html>")
         self._send(404, "<html><body>No encontrado</body></html>")
 
