@@ -5,6 +5,6 @@
     "base_url": "http://127.0.0.1:8001",
     "search": { "url": "{base_url}/catalogo?search={query}", "item": ".card", "link": "a", "title": ".card-title", "image": "img", "slug_regex": "/blabla/([\\w-]+)$" },
     "series": { "url": "{base_url}/blabla/{slug}", "item": ".episodes a", "link": "self", "number_regex": "/(\\d+)$" },
-    "episode": { "url": "{base_url}/blabla/{slug}/{episode}", "exists_selector": "video, .player", "not_found_text": ["no encontrado"] }
+    "episode": { "url": "{base_url}/blabla/{slug}/{episode}", "exists_selector": "video, .player", "not_found_text": ["no encontrado"], "embeds_regex": "embeds:(\\{.*?\\}),downloads:" }
   }
 ]

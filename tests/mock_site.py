@@ -34,7 +34,16 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, f"<html><body><div class='episodes'>{eps}</div></body></html>")
         m = re.fullmatch(r"/blabla/([\w-]+)/(\d+)", u.path)
         if m and m[1] in SERIES and int(m[2]) <= SERIES[m[1]][1]:
-            return self._send(200, "<html><body><video src='x.mp4'></video></body></html>")
+            # Mismo formato que AnimeAV1 real: objeto JS con claves sin comillas, embebido
+            # en un <script>, con "embeds" (reproductores) y "downloads" (solo descarga).
+            payload = (
+                'embeds:{SUB:[{server:"Voe",url:"https://voe.example/e/abc"},'
+                '{server:"MP4Upload",url:"https://mp4upload.example/embed-xyz.html"}],'
+                'DUB:[{server:"Voe",url:"https://voe.example/e/def"}]},'
+                'downloads:{SUB:[{server:"Mega",url:"https://mega.nz/file/xyz"}],DUB:[]}'
+            )
+            return self._send(200, f"<html><body><video src='x.mp4'></video>"
+                               f"<script>window.__DATA__={{{payload}}}</script></body></html>")
         self._send(404, "<html><body>No encontrado</body></html>")
 
     def log_message(self, *a):

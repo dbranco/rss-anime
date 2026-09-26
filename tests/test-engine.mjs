@@ -14,3 +14,16 @@ console.log("ep4:", (await engine.checkEpisode(p, "re-zero", 4)).exists);
 const epUrl = engine.episodeUrl(p, "re-zero", 3);
 assert.equal(epUrl, "http://127.0.0.1:8001/blabla/re-zero/3"); // misma plantilla que checkEpisode, sin red
 console.log("episodeUrl:", epUrl);
+
+const players = await engine.episodePlayers(p, "re-zero", 3);
+assert.deepEqual(players.SUB, [
+  { server: "Voe", url: "https://voe.example/e/abc" },
+  { server: "MP4Upload", url: "https://mp4upload.example/embed-xyz.html" }
+]);
+assert.deepEqual(players.DUB, [{ server: "Voe", url: "https://voe.example/e/def" }]);
+console.log("episodePlayers:", JSON.stringify(players));
+
+// provider sin embeds_regex: la función no existe para él, no revienta
+const noEmbeds = { ...p, episode: { ...p.episode, embeds_regex: undefined } };
+assert.equal(await engine.episodePlayers(noEmbeds, "re-zero", 3), null);
+console.log("episodePlayers sin soporte: null");

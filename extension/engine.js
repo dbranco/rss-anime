@@ -83,3 +83,28 @@ export async function checkEpisode(p, slug, episode) {
   if (exists && e.exists_selector) exists = !!doc(html).querySelector(e.exists_selector);
   return { exists, status, url };
 }
+
+// Servidores de streaming embebibles del episodio (SUB/DUB), si el provider los expone.
+// No todos los servidores que lista un sitio sirven para esto: muchos (ej. Mega) son solo de
+// descarga y bloquean que su página se cargue en un iframe de otro sitio. El provider declara
+// `episode.embeds_regex` para capturar el bloque JS con los que SÍ son embebibles; sin ese
+// campo, la función devuelve null (el provider simplemente no soporta esto).
+// El bloque capturado no es JSON válido (claves sin comillas: embeds:{SUB:[{server:"..."}]}),
+// así que en vez de intentar convertirlo a JSON se extrae cada par server/url con su propio
+// regex, más simple y robusto que un parser de objetos JS.
+export async function episodePlayers(p, slug, episode) {
+  const e = p.episode;
+  if (!e.embeds_regex) return null;
+  const url = fill(p, e.url, { slug, episode });
+  const { html } = await fetchHtml(p, url);
+  const m = new RegExp(e.embeds_regex).exec(html);
+  if (!m) return null;
+  const blob = m[1];
+  const track = t => {
+    const tm = new RegExp(`${t}:\\[(.*?)\\]`).exec(blob);
+    if (!tm) return [];
+    return [...tm[1].matchAll(/\{server:"([^"]+)",url:"([^"]+)"\}/g)].map(x => ({ server: x[1], url: x[2] }));
+  };
+  const SUB = track("SUB"), DUB = track("DUB");
+  return (SUB.length || DUB.length) ? { SUB, DUB } : null;
+}
