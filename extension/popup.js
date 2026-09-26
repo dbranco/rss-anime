@@ -16,11 +16,24 @@ const el = (tag, props = {}, ...kids) => {
 const link = (href, text) => el("a", { href: safe(href), target: "_blank", rel: "noopener", textContent: text });
 const btn = (text, fn) => { const b = el("button", { textContent: text }); b.onclick = fn; return b; };
 const explain = e => e instanceof TypeError
-  ? "No se pudo conectar. ¿Diste permiso al dominio? Vuelve a guardar el provider en Opciones."
+  ? "No se pudo conectar. Puede que falte conceder permiso a ese dominio — vuelve a intentarlo."
   : e.message;
 
 let providers = [];
 const prov = id => providers.find(p => p.id === id);
+function domainOrigin(p) { const u = new URL(p.base_url); return `${u.protocol}//${u.hostname}/*`; }
+
+// Pide permiso de Chrome para los dominios de los providers en uso, en el mismo gesto de clic
+// que ya está en curso. Nadie más lo pide: el admin lo hace en Opciones al guardar, y a un
+// usuario normal no le queda otro sitio donde hacerlo. Si ya estaba concedido no muestra nada.
+async function ensurePermissions(extraId) {
+  const list = live(await get("watchlist", []));
+  const ids = new Set(list.map(w => w.provider));
+  if (extraId) ids.add(extraId);
+  const origins = [...new Set([...ids].map(id => prov(id)).filter(Boolean).map(domainOrigin))];
+  if (!origins.length) return;
+  try { await chrome.permissions.request({ origins }); } catch { /* el fetch fallará y explain() lo explica */ }
+}
 
 async function fillProviders() {
   providers = await get("providers", []);
@@ -80,6 +93,7 @@ $("#go").onclick = async () => {
   const q = $("#q").value.trim();
   const p = prov($("#prov").value);
   if (!q || !p) return;
+  await ensurePermissions(p.id);
   msg("Buscando…");
   try {
     const res = await engine.search(p, q);
@@ -96,6 +110,7 @@ $("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click
 
 async function checkNext(item, st) {
   const p = prov(item.provider);
+  await ensurePermissions();
   const n = (item.last || 0) + 1;
   st.textContent = "Comprobando…";
   try {
@@ -127,6 +142,7 @@ async function renderList() {
         el("div", { className: "actions" },
           btn("Siguiente", () => checkNext(item, st)),
           btn("Episodios", async () => {
+            await ensurePermissions();
             eps.textContent = "Cargando…";
             try {
               const l = await engine.episodes(prov(item.provider), item.slug);
@@ -244,6 +260,7 @@ function renderEpisodePanel(g, sel, onChange) {
           : btn("Marcar visto", async () => { await groups.markUpTo(sel.step, sel.episode); itinSel.delete(g.id); onChange(); }),
         url ? link(url, "Abrir") : "",
         p ? btn("▶ Ver aquí", async () => {
+              await ensurePermissions(sel.step.provider);
               playerBox.textContent = "Buscando servidores…";
               try { renderPlayerPicker(playerBox, await engine.episodePlayers(p, sel.step.slug, sel.episode)); }
               catch (e) { playerBox.textContent = "Error: " + explain(e); }
@@ -316,6 +333,7 @@ async function renderGroups() {
             ? el("div", { className: "actions" },
                 btn("Siguiente", async () => {
                   const p = prov(cur.step.provider);
+                  await ensurePermissions(cur.step.provider);
                   st.textContent = "Comprobando…";
                   try {
                     const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
@@ -344,6 +362,7 @@ async function renderGroups() {
 }
 
 $("#all").onclick = async () => {
+  await ensurePermissions();
   msg("Sincronizando y comprobando en segundo plano…");
   try { await chrome.runtime.sendMessage({ type: "checkNow" }); await fillProviders(); renderList(); msg("Listo"); }
   catch (e) { msg("Error: " + e.message); }
