@@ -199,6 +199,12 @@ $("#newGroup").onclick = async () => {
   const items = live(await get("watchlist", []));
   $("#stepItem").replaceChildren(...items.map(it =>
     el("option", { value: `${it.provider}|${it.slug}`, textContent: it.title })));
+  importDraft = [];
+  $("#importJson").value = "";
+  $("#importAssign").hidden = true;
+  $("#importResults").hidden = true;
+  $("#importResults").replaceChildren();
+  $("#importProviderPick").replaceChildren(...providers.map(p => el("option", { value: p.id, textContent: p.name || p.id })));
   $("#groupForm").hidden = false;
 };
 
@@ -224,6 +230,60 @@ $("#addStepBtn").onclick = () => {
   $("#stepTo").value = "1";
   $("#stepExclude").value = "";
   renderDraftSteps();
+};
+
+let importDraft = [];
+
+// Paso 1: pegar el JSON de una IA (título + rango) y leerlo.
+$("#importParseBtn").onclick = () => {
+  let data;
+  try { data = JSON.parse($("#importJson").value); }
+  catch (e) { msg("JSON inválido: " + e.message); return; }
+  if (data.name) $("#groupName").value = data.name;
+  importDraft = (data.steps || []).map(s => ({
+    title: s.title || "", from: s.from ?? 1, to: s.to ?? 1, exclude: s.exclude || [], provider: null
+  }));
+  renderImportRows();
+  $("#importAssign").hidden = false;
+  $("#importResults").hidden = true;
+  $("#importResults").replaceChildren();
+};
+
+function renderImportRows() {
+  $("#importRows").replaceChildren(...importDraft.map((row, i) => el("div", { className: "row" },
+    el("input", { type: "checkbox", id: `imp${i}` }),
+    el("span", { textContent: `${row.title}${row.provider ? " → " + (prov(row.provider)?.name || row.provider) : ""}` }))));
+}
+
+// Paso 2: marcar uno o varios títulos y aplicarles el provider elegido a la vez.
+$("#importApplyBtn").onclick = () => {
+  const p = $("#importProviderPick").value;
+  if (!p) return;
+  importDraft.forEach((row, i) => { if ($("#imp" + i).checked) row.provider = p; });
+  renderImportRows();
+};
+
+// Paso 3: buscar cada título en su provider y dejar elegir el resultado correcto.
+$("#importSearchBtn").onclick = async () => {
+  if (!importDraft.length) return;
+  if (importDraft.some(r => !r.provider)) { msg("Asigna un provider a todos los títulos antes de buscar"); return; }
+  $("#importResults").hidden = false;
+  $("#importResults").replaceChildren();
+  for (const row of importDraft) {
+    const list = el("div", {});
+    const box = el("div", { className: "card" }, el("div", { className: "body" }, el("b", { textContent: row.title }), list));
+    $("#importResults").append(box);
+    try {
+      const res = await engine.search(prov(row.provider), row.title);
+      list.replaceChildren(...(res.length
+        ? res.map(r => btn(r.title, () => {
+            draftSteps.push({ provider: row.provider, slug: r.slug, from: row.from, to: row.to, exclude: row.exclude });
+            renderDraftSteps();
+            box.remove();
+          }))
+        : [el("span", { className: "st", textContent: "Sin resultados" })]));
+    } catch (e) { list.textContent = "Error: " + explain(e); }
+  }
 };
 
 $("#saveGroupBtn").onclick = async () => {

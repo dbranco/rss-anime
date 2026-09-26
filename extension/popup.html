@@ -9,7 +9,11 @@
   h2 { font-size: .95rem; margin: 14px 0 4px; }
   .row { display: flex; gap: 6px; }
   .row input { flex: 1; min-width: 0; }
-  input, select, button { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #8886; background: transparent; color: inherit; }
+  input, select, button, textarea { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #8886; background: transparent; color: inherit; }
+  textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+  pre { font-size: .75rem; white-space: pre-wrap; background: #8881; padding: 6px; border-radius: 6px; margin: 4px 0; }
+  details summary { cursor: pointer; font-size: .85rem; margin: 6px 0; }
+  button.small { padding: 2px 6px; font-size: .8rem; }
   button { cursor: pointer; }
   .card { display: flex; gap: 8px; padding: 8px; margin: 6px 0; border: 1px solid #8884; border-radius: 8px; }
   .card img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; }
@@ -52,6 +56,27 @@
   <button id="newGroup">＋ Nuevo grupo</button>
   <div id="groupForm" hidden>
     <input id="groupName" placeholder="Nombre del grupo" style="margin:6px 0">
+
+    <details id="importBox">
+      <summary>Pegar JSON (importar desde una IA)</summary>
+      <p class="st">Pide a una IA un orden de visionado y que responda en este formato:</p>
+      <pre>{"name":"...","steps":[{"title":"...","from":1,"to":1}]}</pre>
+      <textarea id="importJson" rows="4" placeholder='{"name":"...","steps":[{"title":"..."}]}'></textarea>
+      <button id="importParseBtn" class="small" style="margin-top:4px">Leer JSON</button>
+
+      <div id="importAssign" hidden>
+        <p class="st">Marca uno o varios títulos y aplícales un provider a la vez:</p>
+        <div id="importRows"></div>
+        <div class="row" style="margin-top:4px">
+          <select id="importProviderPick"></select>
+          <button id="importApplyBtn" class="small">Aplicar a marcados</button>
+        </div>
+        <button id="importSearchBtn" style="margin-top:4px">Buscar</button>
+      </div>
+
+      <div id="importResults" hidden></div>
+    </details>
+
     <div id="groupSteps"></div>
     <div class="row" style="margin-top:6px"><select id="stepItem"></select></div>
     <div class="row" style="margin-top:6px">

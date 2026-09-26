@@ -56,6 +56,27 @@
       <button id="newGroup" class="small">＋ Nuevo grupo</button>
       <div id="groupForm" hidden>
         <input id="groupName" placeholder="Nombre del grupo">
+
+        <details id="importBox">
+          <summary>Pegar JSON (importar desde una IA)</summary>
+          <p class="hint">Pide a una IA un orden de visionado y que responda en este formato:</p>
+          <pre>{"name":"...","steps":[{"title":"...","from":1,"to":1}]}</pre>
+          <textarea id="importJson" rows="4" placeholder='{"name":"...","steps":[{"title":"..."}]}'></textarea>
+          <button id="importParseBtn" class="small">Leer JSON</button>
+
+          <div id="importAssign" hidden>
+            <p class="hint">Marca uno o varios títulos y aplícales un provider a la vez:</p>
+            <div id="importRows"></div>
+            <div class="row">
+              <select id="importProviderPick"></select>
+              <button id="importApplyBtn" class="small">Aplicar a marcados</button>
+            </div>
+            <button id="importSearchBtn" class="small">Buscar</button>
+          </div>
+
+          <div id="importResults" hidden></div>
+        </details>
+
         <div id="groupSteps"></div>
         <div class="row"><select id="stepItem"></select></div>
         <div class="row">

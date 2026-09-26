@@ -41,3 +41,7 @@ button.link { width: auto; background: none; border: none; text-decoration: unde
 .tabs { display: flex; gap: 6px; margin: 10px 0; }
 .tabs button { flex: 1; }
 .tabs button.active { background: color-mix(in srgb, currentColor 15%, transparent); font-weight: bold; }
+pre { font-size: .8rem; white-space: pre-wrap; background: color-mix(in srgb, currentColor 6%, transparent); padding: 8px; border-radius: 8px; margin: 4px 0; }
+details summary { cursor: pointer; font-size: .9rem; margin: 8px 0; }
+#importRows .row { align-items: center; }
+#importRows input[type="checkbox"] { width: auto; flex: 0 0 auto; }
