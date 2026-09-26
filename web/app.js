@@ -3,7 +3,7 @@ import * as engine from "../extension/engine.js";
 import { get, set } from "../extension/store.js";
 import { live, add, mutate } from "../extension/list.js";
 import * as groups from "../extension/groups.js";
-import { signIn, signUp, signOut, getSession, syncNow } from "../extension/sync.js";
+import { signIn, signUp, signOut, getSession, syncNow, saveAppProviders } from "../extension/sync.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -59,11 +59,10 @@ $("#saveProvidersBtn").onclick = async () => {
     }
   } catch (e) { $("#configMsg").textContent = "JSON no válido: " + e.message; return; }
 
-  await set("providers", arr);
-  await set("providers_updated_at", new Date().toISOString());
+  try { await saveAppProviders(arr); }
+  catch (e) { $("#configMsg").textContent = "Error al guardar: " + explain(e); return; }
   await fillProviders();
   $("#configMsg").textContent = "Guardado.";
-  try { await requestSync(); } catch (e) { $("#configMsg").textContent = "Guardado, pero la sync falló: " + explain(e); }
 };
 
 async function renderList() {
@@ -323,12 +322,19 @@ function requestSync() {
   return syncing;
 }
 
+async function applyAdminVisibility() {
+  const admin = await get("is_admin", false);
+  $("#tabConfig").hidden = !admin;
+  if (!admin && !$("#configView").hidden) setView("all"); // no lo dejamos varado si deja de ser admin
+}
+
 async function sync(quiet = true) {
   $("#cloud").textContent = "sync…";
   try {
     await requestSync();
     $("#cloud").textContent = "✓";
     await fillProviders(); await renderList(); await renderFeed();
+    await applyAdminVisibility();
     if (!$("#groupsView").hidden) renderGroups();
   } catch (e) {
     $("#cloud").textContent = "⚠";
