@@ -77,7 +77,7 @@ globalThis.chrome = { storage: { local: {
   set: async o => { Object.assign(data, structuredClone(o)); }
 } } };
 const { get } = await import("../extension/store.js");
-const { add } = await import("../extension/list.js");
+const { add, live } = await import("../extension/list.js");
 const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, unmarkFrom, live: liveGroups } =
   await import("../extension/groups.js");
 
@@ -130,4 +130,45 @@ it2 = await unmarkFrom({ provider: "p", slug: "serie" }, 10); // "hacia delante"
 assert.equal(it2.last, 4);
 
 console.log("unmarkFrom OK");
+
+// --- missingSteps / repairGroup / setPublic / subscribe / unsubscribe ---
+const { missingSteps, repairGroup, setPublic, subscribe, unsubscribe, liveSubscriptions } =
+  await import("../extension/groups.js");
+
+const g3 = await addGroup("Grupo con huecos");
+await addStep(g3.id, { provider: "p", slug: "serie" }); // ya está en watchlist (se añadió arriba)
+await addStep(g3.id, { provider: "p", slug: "nueva", from: 1, to: 3 }); // no está
+// addStep mutó una copia del grupo dentro de "groups" (chrome.storage.local falso hace
+// structuredClone en get/set); hay que releer para ver los steps recién añadidos.
+const freshG3 = () => get("groups", []).then(gs => gs.find(x => x.id === g3.id));
+
+let wl = live(await get("watchlist", []));
+const miss = missingSteps(await freshG3(), wl);
+assert.equal(miss.length, 1);
+assert.equal(miss[0].slug, "nueva");
+
+await repairGroup(await freshG3(), wl);
+wl = live(await get("watchlist", []));
+assert.ok(wl.find(w => w.provider === "p" && w.slug === "nueva"));
+assert.equal(missingSteps(await freshG3(), wl).length, 0, "tras reparar ya no faltan pasos");
+console.log("missingSteps/repairGroup OK");
+
+await setPublic(g3.id, true);
+assert.equal((await get("groups", [])).find(x => x.id === g3.id).public, true);
+console.log("setPublic OK");
+
+// subscribe: repara sola la lista del suscriptor y deja la suscripción activa
+const otherOwnerGroup = { user_id: "owner-uuid", id: "grupo-ajeno", name: "Ajeno",
+  steps: [{ provider: "p", slug: "ajena", from: 1, to: 1, exclude: [] }] };
+await subscribe(otherOwnerGroup, live(await get("watchlist", [])));
+assert.ok(live(await get("watchlist", [])).find(w => w.provider === "p" && w.slug === "ajena"));
+let subs = liveSubscriptions(await get("group_subscriptions", []));
+assert.equal(subs.length, 1);
+assert.equal(subs[0].owner_id, "owner-uuid");
+
+await unsubscribe("owner-uuid", "grupo-ajeno");
+subs = liveSubscriptions(await get("group_subscriptions", []));
+assert.equal(subs.length, 0, "borrado lógico: ya no aparece en liveSubscriptions");
+console.log("subscribe/unsubscribe OK");
+
 console.log("TODO OK");

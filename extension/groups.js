@@ -2,7 +2,7 @@
 // deriva del `last` de cada ítem de watchlist, igual que ve el resto de la app.
 // Ver docs/superpowers/specs/2026-09-25-watch-order-groups-design.md
 import { get, set } from "./store.js";
-import { mutate } from "./list.js";
+import { mutate, add } from "./list.js";
 
 export const live = list => list.filter(g => !g.deleted);
 
@@ -97,3 +97,50 @@ export function itinerary(group, watchlist) {
   }
   return out;
 }
+
+export const setPublic = (id, isPublic) => mutateGroup(id, g => { g.public = !!isPublic; });
+
+// Convierte un slug en un título legible (rezero-kara-... -> "Rezero Kara ...") para el ítem
+// que crea missingSteps/repairGroup — no es tan bonito como el título real, pero sirve para
+// identificarlo y, sobre todo, ya existe en la lista y el grupo puede empezar a trackear su
+// progreso. Compartido por el botón "Reparar" (grupos propios) y subscribe() (grupos ajenos).
+const prettify = slug => slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+// Pasos cuyo provider+slug no tiene todavía una entrada en watchlist (no se puede marcar
+// progreso sin ella).
+export function missingSteps(g, watchlist) {
+  const seen = new Set();
+  return (g.steps || []).filter(s => {
+    const key = `${s.provider}|${s.slug}`;
+    if (seen.has(key)) return false; // no repetir el mismo ítem si aparece en varios pasos
+    seen.add(key);
+    return !watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
+  });
+}
+
+export async function repairGroup(g, watchlist) {
+  for (const s of missingSteps(g, watchlist)) {
+    await add({ provider: s.provider, slug: s.slug, title: prettify(s.slug), link: null, image: null });
+  }
+}
+
+export const liveSubscriptions = list => list.filter(s => !s.deleted);
+
+async function mutateSubscription(ownerId, groupId, fn) {
+  const subs = await get("group_subscriptions", []);
+  let s = subs.find(x => x.owner_id === ownerId && x.group_id === groupId);
+  if (!s) { s = { owner_id: ownerId, group_id: groupId, deleted: false, updated_at: new Date().toISOString() }; subs.push(s); }
+  fn(s);
+  s.updated_at = new Date().toISOString();
+  await set("group_subscriptions", subs);
+  return s;
+}
+
+// Se suscribe y, si hacen falta, crea ya las entradas de watchlist para poder marcar
+// progreso desde el primer momento (lo que "Reparar" hace a mano para tus propios grupos).
+export async function subscribe(group, watchlist) {
+  await mutateSubscription(group.user_id, group.id, s => { s.deleted = false; });
+  await repairGroup(group, watchlist);
+}
+
+export const unsubscribe = (ownerId, groupId) => mutateSubscription(ownerId, groupId, s => { s.deleted = true; });
