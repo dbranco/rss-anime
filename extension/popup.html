@@ -24,13 +24,14 @@
   .eps a { padding: 1px 6px; border: 1px solid #8886; border-radius: 5px; text-decoration: none; }
   .eps a.seen { text-decoration: line-through; opacity: .5; }
   .avatars { display: flex; gap: 4px; overflow-x: auto; margin: 6px 0; }
-  .avatars img, .avatar-ph { width: 32px; height: 45px; object-fit: cover; border-radius: 4px; flex: none; border: 2px solid transparent; }
-  .avatars img.current, .avatar-ph.current { border-color: currentColor; }
-  .avatar-ph { display: flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; font-weight: bold; }
+  .avatars .avatar { width: 32px; height: 45px; object-fit: cover; border-radius: 4px; flex: none; border: 2px solid var(--av, #8886); }
+  .avatars .current { border-width: 3px; }
+  .avatar-ph { display: flex; align-items: center; justify-content: center; color: var(--av, inherit); background: #8882; font-size: .8rem; font-weight: bold; }
   .itin { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0 2px; }
-  .itin .ep { width: 22px; height: 22px; border-radius: 5px; border: 2px solid #8886; font-size: .68rem; display: flex; align-items: center; justify-content: center; }
+  .itin .ep { width: 22px; height: 22px; border-radius: 5px; border: 2px solid #8886; font-size: .68rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .itin .ep.seen { text-decoration: line-through; opacity: .55; color: #fff; }
-  .itin .ep.clickable { cursor: pointer; font-weight: bold; }
+  .itin .ep.now { font-weight: bold; box-shadow: 0 0 0 1px currentColor inset; }
+  .itin .ep.selected { outline: 2px solid currentColor; outline-offset: 1px; }
   .st { margin-top: 3px; font-size: .85rem; }
   .news { display: flex; justify-content: space-between; gap: 6px; padding: 4px 0; }
   #msg { color: #c60; min-height: 1.1em; margin: 6px 0 0; }

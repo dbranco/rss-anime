@@ -95,22 +95,45 @@ function titleColors(steps) {
   return map;
 }
 
+const itinSel = new Map(); // id de grupo -> episodio seleccionado ({step, episode, item, seen}) o null
+
+function avatarEl(title, color, isCur, image) {
+  const cls = "avatar" + (isCur ? " current" : "");
+  const ph = () => el("div", { className: cls + " avatar-ph", title,
+    textContent: title[0]?.toUpperCase() || "?", style: `--av:${color}` });
+  if (!image) return ph();
+  const img = el("img", { src: image, title, className: cls, style: `--av:${color}` });
+  img.onerror = () => img.replaceWith(ph()); // portada rota/bloqueada: cae al marcador de color
+  return img;
+}
+
 function renderAvatars(g, cur, watchlist) {
   const distinct = [...new Map(g.steps.map(s => [`${s.provider}|${s.slug}`, s])).values()];
   const colors = titleColors(g.steps);
   return el("div", { className: "avatars" }, ...distinct.map(s => {
     const it = watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
     const isCur = !!cur && cur.step.provider === s.provider && cur.step.slug === s.slug;
-    const title = it ? it.title : s.slug;
-    return it?.image
-      ? el("img", { src: it.image, title, className: isCur ? "current" : "" })
-      : el("div", { className: "avatar-ph" + (isCur ? " current" : ""), title,
-          textContent: title[0]?.toUpperCase() || "?",
-          style: `background:${colors.get(`${s.provider}|${s.slug}`)}` });
+    return avatarEl(it ? it.title : s.slug, colors.get(`${s.provider}|${s.slug}`), isCur, it?.image);
   }));
 }
 
-function renderItinerary(g, cur, watchlist, onMark) {
+// Tarjeta de acción del episodio seleccionado: marcar/desmarcar visto, o abrir su página.
+function renderEpisodePanel(g, sel, onChange) {
+  const title = sel.item ? sel.item.title : sel.step.slug;
+  const p = prov(sel.step.provider);
+  const url = p ? engine.episodeUrl(p, sel.step.slug, sel.episode) : null;
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: `${title} — episodio ${sel.episode}` }),
+      el("div", { className: "actions" },
+        sel.seen
+          ? btn("Desmarcar", async () => { await groups.unmarkFrom(sel.step, sel.episode); itinSel.delete(g.id); onChange(); })
+          : btn("Marcar visto", async () => { await groups.markUpTo(sel.step, sel.episode); itinSel.delete(g.id); onChange(); }),
+        url ? link(url, "Abrir") : "",
+        btn("Cerrar", () => { itinSel.delete(g.id); renderGroups(); }))));
+}
+
+function renderItinerary(g, cur, watchlist, onChange) {
   const items = groups.itinerary(g, watchlist);
   if (!items.length) return el("div", {});
   const colors = titleColors(g.steps);
@@ -119,17 +142,23 @@ function renderItinerary(g, cur, watchlist, onMark) {
   if (!itinPage.has(g.id)) itinPage.set(g.id, curIdx >= 0 ? Math.floor(curIdx / ITIN_PAGE_SIZE) : 0);
   const page = Math.min(itinPage.get(g.id), pages - 1);
   const start = page * ITIN_PAGE_SIZE;
+  const sel = itinSel.get(g.id);
 
   const badges = items.slice(start, start + ITIN_PAGE_SIZE).map((e, i) => {
-    const clickable = !e.seen && !!cur && e.step === cur.step;
+    const globalIdx = start + i;
     const color = colors.get(`${e.step.provider}|${e.step.slug}`);
+    const isSel = sel && sel.step === e.step && sel.episode === e.episode;
     const badge = el("span", {
-      className: "ep" + (e.seen ? " seen" : "") + (clickable ? " clickable" : ""),
-      textContent: String(start + i + 1),
+      className: "ep" + (e.seen ? " seen" : "") + (globalIdx === curIdx ? " now" : "") + (isSel ? " selected" : ""),
+      textContent: String(globalIdx + 1),
       title: `Episodio ${e.episode} de ${e.item ? e.item.title : e.step.slug}`,
       style: `border-color:${color}` + (e.seen ? `;background:${color}` : "")
     });
-    if (clickable) badge.onclick = () => onMark(e.step, e.episode);
+    // Un toque selecciona/abre la tarjeta de acción; toca otra vez para cerrarla.
+    badge.onclick = () => {
+      itinSel.set(g.id, isSel ? null : { step: e.step, episode: e.episode, item: e.item, seen: e.seen });
+      renderGroups();
+    };
     return badge;
   });
 
@@ -140,7 +169,8 @@ function renderItinerary(g, cur, watchlist, onMark) {
           btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderGroups(); }),
           el("span", { textContent: `Página ${page + 1} de ${pages}` }),
           btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderGroups(); }))
-      : "");
+      : "",
+    sel ? renderEpisodePanel(g, sel, onChange) : "");
 }
 
 async function renderGroups() {
@@ -182,7 +212,7 @@ async function renderGroups() {
         el("b", { textContent: g.name }),
         renderAvatars(g, cur, watchlist),
         body,
-        renderItinerary(g, cur, watchlist, onMark),
+        renderItinerary(g, cur, watchlist, () => { renderGroups(); requestSync(); }),
         el("div", { className: "actions" },
           btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderGroups(); requestSync(); }))));
   }));
