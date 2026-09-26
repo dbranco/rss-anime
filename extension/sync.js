@@ -44,9 +44,22 @@ export async function signUp(email, password) {
   return { confirmed: false }; // Supabase pide confirmar el email antes de iniciar sesión
 }
 
-// Al cerrar sesión se limpia también is_admin: si no, el flag del admin sobrevive hasta la
-// siguiente sync y la UI seguiría ofreciendo editar providers a quien ya no es nadie.
-export const signOut = () => Promise.all([set("session", null), set("is_admin", false)]).then(() => {});
+// chrome.storage.local / localStorage no están aislados por cuenta: si al cerrar sesión solo
+// se borra "session", los datos de la cuenta anterior (watchlist, grupos, feed_token...) se
+// quedan en el dispositivo y, al iniciar sesión con OTRA cuenta, el merge por updated_at de
+// syncWatchlist/syncGroups los sube como si fueran suyos — fuga real de datos entre cuentas,
+// no solo un glitch visual. `providers`/`interval`/`supabase` no se limpian: son config
+// compartida de la app o del dispositivo, no datos de la cuenta.
+export const signOut = () => Promise.all([
+  set("session", null),
+  set("is_admin", false),
+  set("watchlist", []),
+  set("groups", []),
+  set("feed_token", null),
+  set("news", []),
+  set("notified", []),
+  set("last_sync", null)
+]).then(() => {});
 export const getSession = () => get("session", null);
 
 async function session() {
