@@ -47,6 +47,7 @@ button.link { width: auto; background: none; border: none; text-decoration: unde
 .itin .ep.seen { text-decoration: line-through; opacity: .55; color: #fff; }
 .itin .ep.now { font-weight: bold; box-shadow: 0 0 0 1px currentColor inset; }
 .itin .ep.selected { outline: 2px solid currentColor; outline-offset: 1px; }
+.player-frame { width: 100%; aspect-ratio: 16/9; border: 0; border-radius: 8px; margin-top: 8px; }
 #feedUrl { font-size: .8rem; }
 .tabs { display: flex; gap: 6px; margin: 10px 0; }
 .tabs button { flex: 1; }

@@ -138,11 +138,38 @@ function renderAvatars(g, cur, watchlist) {
   }));
 }
 
-// Tarjeta de acción del episodio seleccionado: marcar/desmarcar visto, o abrir su página.
+// Pestañas SUB/DUB + botones de servidor; al elegir uno, embebe su iframe debajo.
+// No todos los servidores que lista un provider sirven para esto — solo entran aquí los que
+// engine.episodePlayers() ya filtró como embebibles (ver ese comentario en engine.js).
+function renderPlayerPicker(box, players) {
+  if (!players || (!players.SUB.length && !players.DUB.length)) {
+    box.textContent = "Este provider no tiene servidores para ver aquí.";
+    return;
+  }
+  const tabs = el("div", { className: "actions" });
+  const servers = el("div", { className: "actions" });
+  const frame = el("div", {});
+  let track = players.SUB.length ? "SUB" : "DUB";
+
+  const renderServers = () => {
+    servers.replaceChildren(...players[track].map(s => btn(s.server, () => {
+      frame.replaceChildren(el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
+    })));
+  };
+  tabs.replaceChildren(
+    ...(players.SUB.length ? [btn("SUB", () => { track = "SUB"; renderServers(); })] : []),
+    ...(players.DUB.length ? [btn("DUB", () => { track = "DUB"; renderServers(); })] : []));
+  renderServers();
+  box.replaceChildren(tabs, servers, frame);
+}
+
+// Tarjeta de acción del episodio seleccionado: marcar/desmarcar visto, abrir su página o
+// verlo aquí mismo con un servidor embebible.
 function renderEpisodePanel(g, sel, onChange) {
   const title = sel.item ? sel.item.title : sel.step.slug;
   const p = prov(sel.step.provider);
   const url = p ? engine.episodeUrl(p, sel.step.slug, sel.episode) : null;
+  const playerBox = el("div", {});
   return el("div", { className: "card" },
     el("div", { className: "body" },
       el("b", { textContent: `${title} — episodio ${sel.episode}` }),
@@ -151,7 +178,13 @@ function renderEpisodePanel(g, sel, onChange) {
           ? btn("Desmarcar", async () => { await groups.unmarkFrom(sel.step, sel.episode); itinSel.delete(g.id); onChange(); })
           : btn("Marcar visto", async () => { await groups.markUpTo(sel.step, sel.episode); itinSel.delete(g.id); onChange(); }),
         url ? link(url, "Abrir") : "",
-        btn("Cerrar", () => { itinSel.delete(g.id); renderGroups(); }))));
+        p ? btn("▶ Ver aquí", async () => {
+              playerBox.textContent = "Buscando servidores…";
+              try { renderPlayerPicker(playerBox, await engine.episodePlayers(p, sel.step.slug, sel.episode)); }
+              catch (e) { playerBox.textContent = "Error: " + explain(e); }
+            }) : "",
+        btn("Cerrar", () => { itinSel.delete(g.id); renderGroups(); })),
+      playerBox));
 }
 
 function renderItinerary(g, cur, watchlist, onChange) {
