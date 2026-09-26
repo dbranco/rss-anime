@@ -44,6 +44,7 @@
     <div class="tabs">
       <button id="tabAll" class="active">Todo</button>
       <button id="tabGroups">Grupos</button>
+      <button id="tabConfig">Config</button>
     </div>
 
     <div id="allView">
@@ -91,6 +92,14 @@
         </div>
         <p id="groupMsg" class="msg"></p>
       </div>
+    </div>
+
+    <div id="configView" hidden>
+      <h2>Providers (JSON)</h2>
+      <p class="hint">Plantillas: {base_url} {query} {slug} {episode}. Es JSON, así que las barras de las regex van dobles (\\).</p>
+      <textarea id="providersJson" rows="16"></textarea>
+      <button id="saveProvidersBtn" class="small">Guardar providers</button>
+      <p id="configMsg" class="msg"></p>
     </div>
 
     <h2>Feed RSS</h2>

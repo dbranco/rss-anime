@@ -29,14 +29,42 @@ async function fillProviders() {
 
 $("#tabAll").onclick = () => setView("all");
 $("#tabGroups").onclick = () => setView("groups");
+$("#tabConfig").onclick = () => setView("config");
 
 function setView(v) {
   $("#allView").hidden = v !== "all";
   $("#groupsView").hidden = v !== "groups";
+  $("#configView").hidden = v !== "config";
   $("#tabAll").classList.toggle("active", v === "all");
   $("#tabGroups").classList.toggle("active", v === "groups");
+  $("#tabConfig").classList.toggle("active", v === "config");
   if (v === "groups") renderGroups();
+  if (v === "config") renderConfig();
 }
+
+async function renderConfig() {
+  $("#providersJson").value = JSON.stringify(await get("providers", []), null, 2);
+  $("#configMsg").textContent = "";
+}
+
+$("#saveProvidersBtn").onclick = async () => {
+  let arr;
+  try {
+    arr = JSON.parse($("#providersJson").value);
+    if (!Array.isArray(arr)) throw new Error("Debe ser una lista [ ... ]");
+    for (const p of arr) {
+      for (const k of ["id", "base_url", "search", "episode"]) if (!p[k]) throw new Error(`Falta "${k}" en un provider`);
+      if (!p.search.slug_regex) throw new Error(`Falta search.slug_regex en "${p.id}"`);
+      new URL(p.base_url);
+    }
+  } catch (e) { $("#configMsg").textContent = "JSON no válido: " + e.message; return; }
+
+  await set("providers", arr);
+  await set("providers_updated_at", new Date().toISOString());
+  await fillProviders();
+  $("#configMsg").textContent = "Guardado.";
+  try { await requestSync(); } catch (e) { $("#configMsg").textContent = "Guardado, pero la sync falló: " + explain(e); }
+};
 
 async function renderList() {
   const list = live(await get("watchlist", []));
