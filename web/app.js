@@ -174,21 +174,25 @@ function renderPlayerPicker(box, players) {
     box.textContent = "Este provider no tiene servidores para ver aquí.";
     return;
   }
-  const tabs = el("div", { className: "actions" });
-  const servers = el("div", { className: "actions" });
+  const tracks = ["SUB", "DUB"].filter(t => players[t].length);
+  const trackSel = el("select", {});
+  const serverSel = el("select", {});
   const frame = el("div", {});
-  let track = players.SUB.length ? "SUB" : "DUB";
 
-  const renderServers = () => {
-    servers.replaceChildren(...players[track].map(s => btn(s.server, () => {
-      frame.replaceChildren(el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
-    })));
+  const loadFrame = () => {
+    const s = players[trackSel.value][serverSel.selectedIndex];
+    frame.replaceChildren(el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
   };
-  tabs.replaceChildren(
-    ...(players.SUB.length ? [btn("SUB", () => { track = "SUB"; renderServers(); })] : []),
-    ...(players.DUB.length ? [btn("DUB", () => { track = "DUB"; renderServers(); })] : []));
-  renderServers();
-  box.replaceChildren(tabs, servers, frame);
+  const fillServers = () => {
+    serverSel.replaceChildren(...players[trackSel.value].map(s => el("option", { value: s.server, textContent: s.server })));
+    loadFrame();
+  };
+  trackSel.replaceChildren(...tracks.map(t => el("option", { value: t, textContent: t })));
+  trackSel.onchange = fillServers;
+  serverSel.onchange = loadFrame;
+  fillServers(); // carga el primer servidor del primer track sin esperar un clic más
+
+  box.replaceChildren(el("div", { className: "row" }, trackSel, serverSel), frame);
 }
 
 // Tarjeta de acción del episodio seleccionado: marcar/desmarcar visto, abrir su página o
