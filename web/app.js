@@ -62,7 +62,11 @@ async function renderList() {
             eps.textContent = "Cargando…";
             try {
               const l = await engine.episodes(prov(item.provider), item.slug);
-              eps.replaceChildren(...(l.length ? l.map(e => link(e.link, String(e.number))) : ["Sin episodios"]));
+              eps.replaceChildren(...(l.length ? l.map(e => {
+                const a = link(e.link, String(e.number));
+                if (e.number <= (item.last || 0)) a.className = "seen";
+                return a;
+              }) : ["Sin episodios"]));
             } catch (e) { eps.textContent = "Error: " + explain(e); }
           }),
           btn("Visto +1", async () => {
@@ -78,12 +82,81 @@ async function renderList() {
   }));
 }
 
+const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169"];
+const ITIN_PAGE_SIZE = 25;
+const itinPage = new Map(); // id de grupo -> página actual del itinerario
+
+function titleColors(steps) {
+  const map = new Map();
+  for (const s of steps) {
+    const key = `${s.provider}|${s.slug}`;
+    if (!map.has(key)) map.set(key, PALETTE[map.size % PALETTE.length]);
+  }
+  return map;
+}
+
+function renderAvatars(g, cur, watchlist) {
+  const distinct = [...new Map(g.steps.map(s => [`${s.provider}|${s.slug}`, s])).values()];
+  const colors = titleColors(g.steps);
+  return el("div", { className: "avatars" }, ...distinct.map(s => {
+    const it = watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
+    const isCur = !!cur && cur.step.provider === s.provider && cur.step.slug === s.slug;
+    const title = it ? it.title : s.slug;
+    return it?.image
+      ? el("img", { src: it.image, title, className: isCur ? "current" : "" })
+      : el("div", { className: "avatar-ph" + (isCur ? " current" : ""), title,
+          textContent: title[0]?.toUpperCase() || "?",
+          style: `background:${colors.get(`${s.provider}|${s.slug}`)}` });
+  }));
+}
+
+function renderItinerary(g, cur, watchlist, onMark) {
+  const items = groups.itinerary(g, watchlist);
+  if (!items.length) return el("div", {});
+  const colors = titleColors(g.steps);
+  const curIdx = cur ? items.findIndex(e => e.step === cur.step && e.episode === cur.next) : -1;
+  const pages = Math.max(1, Math.ceil(items.length / ITIN_PAGE_SIZE));
+  if (!itinPage.has(g.id)) itinPage.set(g.id, curIdx >= 0 ? Math.floor(curIdx / ITIN_PAGE_SIZE) : 0);
+  const page = Math.min(itinPage.get(g.id), pages - 1);
+  const start = page * ITIN_PAGE_SIZE;
+
+  const badges = items.slice(start, start + ITIN_PAGE_SIZE).map((e, i) => {
+    const clickable = !e.seen && !!cur && e.step === cur.step;
+    const color = colors.get(`${e.step.provider}|${e.step.slug}`);
+    const badge = el("span", {
+      className: "ep" + (e.seen ? " seen" : "") + (clickable ? " clickable" : ""),
+      textContent: String(start + i + 1),
+      title: `Episodio ${e.episode} de ${e.item ? e.item.title : e.step.slug}`,
+      style: `border-color:${color}` + (e.seen ? `;background:${color}` : "")
+    });
+    if (clickable) badge.onclick = () => onMark(e.step, e.episode);
+    return badge;
+  });
+
+  return el("div", {},
+    el("div", { className: "itin" }, ...badges),
+    pages > 1
+      ? el("div", { className: "row hint" },
+          btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderGroups(); }),
+          el("span", { textContent: `Página ${page + 1} de ${pages}` }),
+          btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderGroups(); }))
+      : "");
+}
+
 async function renderGroups() {
   const list = groups.live(await get("groups", []));
   const watchlist = live(await get("watchlist", []));
   $("#groups").replaceChildren(...list.map(g => {
     const cur = groups.currentStep(g, watchlist);
     const st = el("div", { className: "msg" });
+    const onMark = async (step, episode) => {
+      const it = await groups.markUpTo(step, episode);
+      if (it) {
+        const news = await get("news", []);
+        await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+      }
+      renderGroups(); requestSync();
+    };
     const body = !cur
       ? el("div", { textContent: "✓ Terminado" })
       : el("div", {},
@@ -100,21 +173,16 @@ async function renderGroups() {
                     st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
                   } catch (e) { st.textContent = "Error: " + explain(e); }
                 }),
-                btn("Visto", async () => {
-                  const it = await groups.markStepSeen(g, watchlist);
-                  if (it) {
-                    const news = await get("news", []);
-                    await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
-                  }
-                  renderGroups(); requestSync();
-                }))
+                btn("Visto", () => onMark(cur.step, cur.next)))
             : el("div", { className: "hint",
                 textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
           st);
     return el("div", { className: "card" },
       el("div", { className: "body" },
         el("b", { textContent: g.name }),
+        renderAvatars(g, cur, watchlist),
         body,
+        renderItinerary(g, cur, watchlist, onMark),
         el("div", { className: "actions" },
           btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderGroups(); requestSync(); }))));
   }));
