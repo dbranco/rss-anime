@@ -116,9 +116,13 @@ for (const st of settings) {
     const mineForGroups = mine.map(w => ({ provider: w.provider_id, slug: w.slug, last: w.last, title: w.title }));
     const myGroups = groups.filter(g => g.user_id === st.user_id);
     const mySubs = subs.filter(s => s.user_id === st.user_id);
+    // El cron lee TODOS los grupos con la service key (salta la RLS), así que el filtro de
+    // visibilidad lo hace él: una suscripción solo alimenta el feed mientras el grupo original
+    // siga público y sin borrar. Si el dueño lo despublica o lo borra, deja de dar episodios.
     const subscribedGroups = mySubs
       .map(s => groups.find(g => g.user_id === s.owner_id && g.id === s.group_id))
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(g => g.public && !g.deleted);
     for (const g of [...myGroups, ...subscribedGroups]) {
       await checkGroupEpisode(g, mineForGroups, st.user_id, known, fresh);
     }

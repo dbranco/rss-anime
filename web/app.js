@@ -250,6 +250,16 @@ function renderItinerary(g, cur, watchlist, onChange) {
 }
 
 function groupCard(g, watchlist, owned) {
+  // El grupo original se despublicó o se borró, así que ya no está en subscribed_groups — pero la
+  // suscripción sigue viva. Sin este hueco la tarjeta desaparecía y con ella el único botón para
+  // darse de baja, dejando la suscripción imposible de quitar desde la UI.
+  if (g._unavailable) {
+    return el("div", { className: "card" },
+      el("div", { className: "body" },
+        el("div", { className: "hint", textContent: "Grupo ya no disponible." }),
+        el("div", { className: "actions" },
+          btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); renderMain(); sync(); }))));
+  }
   const cur = groups.currentStep(g, watchlist);
   const st = el("div", { className: "msg" });
   const onMark = async (step, episode) => {
@@ -284,7 +294,7 @@ function groupCard(g, watchlist, owned) {
   return el("div", { className: "card" },
     el("div", { className: "body" },
       el("b", { textContent: g.name }),
-      owned ? "" : el("div", { className: "hint", textContent: `de ${String(g.user_id || "").slice(0, 8)}…` }),
+      owned ? "" : el("div", { className: "hint", textContent: "de otra cuenta" }),
       missing.length
         ? el("div", { className: "hint" },
             `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
@@ -296,7 +306,9 @@ function groupCard(g, watchlist, owned) {
       el("div", { className: "actions" },
         owned
           ? btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderMain(); requestSync(); })
-          : btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); renderMain(); requestSync(); }))));
+          // sync() (no requestSync() a secas): vuelve a pintar cuando la sync termina, para que la
+          // tarjeta desaparezca de verdad en cuanto refreshSubscribedGroups() deje de traerla.
+          : btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); renderMain(); sync(); }))));
 }
 
 const LIST_PAGE_SIZE = 10;
@@ -306,12 +318,24 @@ let listPage = 0;
 async function renderMain() {
   const watchlist = live(await get("watchlist", []));
   const myGroups = groups.live(await get("groups", []));
-  const subGroups = await get("subscribed_groups", []);
+  // La fuente de verdad de "estoy suscrito" es group_subscriptions; subscribed_groups es solo la
+  // caché de solo lectura del grupo original. Iteramos las suscripciones vivas para que una cuyo
+  // grupo ya no esté en la caché (despublicado o borrado) siga teniendo su hueco con el botón de
+  // baja. El live() sobre la caché es defensa en profundidad: una copia vieja pudo colarse antes
+  // de que el filtro deleted=eq.false existiera.
+  const subGroups = groups.live(await get("subscribed_groups", []));
+  const subEntries = groups.liveSubscriptions(await get("group_subscriptions", [])).map(s => {
+    const g = subGroups.find(x => x.user_id === s.owner_id && x.id === s.group_id);
+    return g
+      ? { kind: "group", data: g, owned: false, ts: g.updated_at }
+      : { kind: "group", owned: false, ts: s.updated_at,
+          data: { id: s.group_id, user_id: s.owner_id, name: null, steps: [], _unavailable: true } };
+  });
   const entries = [];
   if (listFilter !== "groups") entries.push(...watchlist.map(item => ({ kind: "item", data: item, ts: item.updated_at })));
   if (listFilter !== "media") {
     entries.push(...myGroups.map(g => ({ kind: "group", data: g, owned: true, ts: g.updated_at })));
-    entries.push(...subGroups.map(g => ({ kind: "group", data: g, owned: false, ts: g.updated_at })));
+    entries.push(...subEntries);
   }
   entries.sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
 
@@ -323,10 +347,11 @@ async function renderMain() {
   $("#list").replaceChildren(...(page.length
     ? page.map(e => (e.kind === "item" ? itemCard(e.data) : groupCard(e.data, watchlist, e.owned)))
     : ["Nada que mostrar con este filtro."]));
-  $("#listPager").replaceChildren(
-    btn("◀", () => { listPage = Math.max(0, listPage - 1); renderMain(); }),
-    el("span", { textContent: `Página ${listPage + 1} de ${pages}` }),
-    btn("▶", () => { listPage = Math.min(pages - 1, listPage + 1); renderMain(); }));
+  $("#listPager").replaceChildren(...(pages > 1
+    ? [btn("◀", () => { listPage = Math.max(0, listPage - 1); renderMain(); }),
+       el("span", { textContent: `Página ${listPage + 1} de ${pages}` }),
+       btn("▶", () => { listPage = Math.min(pages - 1, listPage + 1); renderMain(); })]
+    : []));
 }
 
 const EXPLORE_PAGE_SIZE = 10;
@@ -356,7 +381,7 @@ function exploreCard(g) {
         btn("Suscribirme", async () => {
           await groups.subscribe(g, live(await get("watchlist", [])));
           st.textContent = "Suscrito.";
-          requestSync();
+          sync(); // sync() = requestSync() + repintar: la nueva suscripción aparece en la lista
         }),
         stars,
         btn("Valorar", async () => {
@@ -372,10 +397,11 @@ function renderExplore() {
   const start = explorePage * EXPLORE_PAGE_SIZE;
   const page = exploreResults.slice(start, start + EXPLORE_PAGE_SIZE);
   $("#exploreResults").replaceChildren(...(page.length ? page.map(exploreCard) : ["Sin resultados"]));
-  $("#explorePager").replaceChildren(
-    btn("◀", () => { explorePage = Math.max(0, explorePage - 1); renderExplore(); }),
-    el("span", { textContent: `Página ${explorePage + 1} de ${pages}` }),
-    btn("▶", () => { explorePage = Math.min(pages - 1, explorePage + 1); renderExplore(); }));
+  $("#explorePager").replaceChildren(...(pages > 1
+    ? [btn("◀", () => { explorePage = Math.max(0, explorePage - 1); renderExplore(); }),
+       el("span", { textContent: `Página ${explorePage + 1} de ${pages}` }),
+       btn("▶", () => { explorePage = Math.min(pages - 1, explorePage + 1); renderExplore(); })]
+    : []));
 }
 
 async function renderFeed() {

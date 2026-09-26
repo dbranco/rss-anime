@@ -143,7 +143,7 @@ alter table public.group_ratings       enable row level security;
 
 drop policy if exists "read public groups" on public.groups;
 create policy "read public groups" on public.groups
-  for select to authenticated using (public = true);
+  for select to authenticated using (public = true and deleted = false);
 
 drop policy if exists "own subscriptions" on public.group_subscriptions;
 create policy "own subscriptions" on public.group_subscriptions

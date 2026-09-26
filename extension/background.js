@@ -86,7 +86,12 @@ async function checkAll() {
 }
 
 async function checkGroups() {
-  const groups = liveGroups(await get("groups", []));
+  // Grupos propios + grupos suscritos (caché de solo lectura del original). El cron ya mete los
+  // episodios de los grupos suscritos en el feed RSS del suscriptor, así que las notificaciones
+  // de escritorio tienen que cubrirlos igual. Mismo filtro de visibilidad que el cron: solo
+  // mientras el grupo original siga público y sin borrar.
+  const subscribed = (await get("subscribed_groups", [])).filter(g => g.public && !g.deleted);
+  const groups = [...liveGroups(await get("groups", [])), ...subscribed];
   if (!groups.length) return;
   const watchlist = live(await get("watchlist", []));
   const providers = await get("providers", []);

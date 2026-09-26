@@ -108,7 +108,11 @@ class H(BaseHTTPRequestHandler):
                 if m[1] in ("app_config", "group_ratings"):
                     pass  # lectura abierta a cualquier autenticado
                 elif m[1] == "groups":
-                    rows = [r for r in rows if r.get("user_id") == uid or r.get("public")]
+                    # Espeja la política "read public groups": los tuyos siempre (incluidos los
+                    # borrados, que la sync necesita para propagar el borrado) y los ajenos solo
+                    # si siguen públicos y sin borrar.
+                    rows = [r for r in rows
+                            if r.get("user_id") == uid or (r.get("public") and not r.get("deleted"))]
                 else:
                     rows = [r for r in rows if r.get("user_id") == uid]
             q = parse_qs(u.query)
@@ -118,6 +122,18 @@ class H(BaseHTTPRequestHandler):
                 if vals[0].startswith("eq."):
                     want = vals[0][3:]
                     rows = [r for r in rows if str(r.get(col)).lower() == want.lower()]
+                elif vals[0].startswith("ilike."):
+                    # PostgREST usa * como comodín (-> % en SQL). La app siempre llama con
+                    # "*texto*", así que basta tratarlo como "contiene", sin distinguir
+                    # mayúsculas; no hace falta soportar comodines en medio del patrón.
+                    want = vals[0][len("ilike."):].strip("*").lower()
+                    rows = [r for r in rows if want in str(r.get(col) or "").lower()]
+                elif vals[0].startswith("in.("):
+                    # in.(a,b,c) — los ids que construye esta app nunca van entre comillas,
+                    # pero las quitamos por si acaso.
+                    want = {v.strip().strip('"').strip("'")
+                            for v in vals[0][len("in.("):].rstrip(")").split(",") if v.strip()}
+                    rows = [r for r in rows if str(r.get(col)) in want]
             if "order" in q:
                 col, _, d = q["order"][0].partition(".")
                 rows.sort(key=lambda r: str(r.get(col)), reverse=(d == "desc"))

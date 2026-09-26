@@ -50,17 +50,28 @@ export async function signUp(email, password) {
 // updated_at de syncWatchlist/syncGroups/syncSubscriptions los sube como si fueran suyos — fuga
 // real de datos entre cuentas, no solo un glitch visual. `providers`/`interval`/`supabase` no se
 // limpian: son config compartida de la app o del dispositivo, no datos de la cuenta.
+//
+// Claves de cuenta que se limpian al cerrar sesión — ver el comentario de signOut().
+// Cualquier clave nueva que dependa de qué cuenta ha iniciado sesión debe añadirse
+// aquí, o signOut() no la limpiará (fuga de datos entre cuentas: ver el historial de
+// este archivo para el bug real que esto causó).
+export const ACCOUNT_KEYS = {
+  is_admin: false,
+  watchlist: [],
+  groups: [],
+  group_subscriptions: [],
+  subscribed_groups: [],
+  feed_token: null,
+  news: [],
+  notified: [],
+  last_sync: null
+};
+
+// La lista vive en ACCOUNT_KEYS (arriba) y no como llamadas set() a mano: así una clave
+// nueva se añade en un solo sitio y el test de tests/test-sync-cron.mjs la cubre solo.
 export const signOut = () => Promise.all([
   set("session", null),
-  set("is_admin", false),
-  set("watchlist", []),
-  set("groups", []),
-  set("group_subscriptions", []),
-  set("subscribed_groups", []),
-  set("feed_token", null),
-  set("news", []),
-  set("notified", []),
-  set("last_sync", null)
+  ...Object.entries(ACCOUNT_KEYS).map(([k, v]) => set(k, v))
 ]).then(() => {});
 export const getSession = () => get("session", null);
 
@@ -215,12 +226,14 @@ async function syncSubscriptions(uid) {
 
 // Trae, en modo solo lectura, el grupo original de cada suscripción viva. No se sube nunca
 // (la propiedad y edición son siempre del dueño); se sobrescribe entera en cada sync. Si el
-// grupo se volvió privado o se borró, simplemente deja de traerlo (la RLS ya no lo permite).
+// grupo se volvió privado o se borró, simplemente deja de traerlo: la RLS ya no lo permite y
+// además filtramos deleted=eq.false explícitamente (la suscripción sigue viva — la UI pinta un
+// hueco "ya no disponible" con su botón de baja a partir de group_subscriptions).
 async function refreshSubscribedGroups() {
   const subs = (await get("group_subscriptions", [])).filter(s => !s.deleted);
   const out = [];
   for (const s of subs) {
-    const [g] = await rest(`groups?select=*&user_id=eq.${s.owner_id}&id=eq.${s.group_id}`);
+    const [g] = await rest(`groups?select=*&user_id=eq.${s.owner_id}&id=eq.${s.group_id}&deleted=eq.false`);
     if (g) out.push(g);
   }
   await set("subscribed_groups", out);
@@ -231,7 +244,7 @@ async function refreshSubscribedGroups() {
 // ella; la paginación de 10 en 10 la hace la UI troceando este array ya ordenado.
 export async function searchPublicGroups(query) {
   const q = encodeURIComponent(`*${query}*`);
-  const found = await rest(`groups?select=*&public=eq.true&name=ilike.${q}`);
+  const found = await rest(`groups?select=*&public=eq.true&deleted=eq.false&name=ilike.${q}`);
   if (!found.length) return [];
   const owners = [...new Set(found.map(g => g.user_id))].join(",");
   const ids = [...new Set(found.map(g => g.id))].join(",");

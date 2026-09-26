@@ -16,7 +16,8 @@ const A = machine(), B = machine();
 const use = m => { globalThis.chrome = m; };
 
 const { get, set } = await import("../extension/store.js");
-const { signUp, signIn, syncNow, saveAppProviders, searchPublicGroups, rateGroup } = await import("../extension/sync.js");
+const { signUp, signIn, signOut, syncNow, saveAppProviders, searchPublicGroups, rateGroup, ACCOUNT_KEYS } =
+  await import("../extension/sync.js");
 const { add, mutate, live } = await import("../extension/list.js");
 const providers = JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8"));
 
@@ -163,13 +164,22 @@ console.log("C (no admin) también recibe episodios nuevos vía los providers co
 use(A);
 const { setPublic } = await import("../extension/groups.js");
 await setPublic(gLong.id, true); // "Maratón larga" (longrun, del bloque anterior)
+// Segundo grupo público con un nombre claramente distinto: sin él, "buscar 'Maratón' devuelve 1"
+// no distinguía "el filtro ilike funciona" de "el mock lo ignora y devuelve el único público".
+// Su paso apunta a una serie que A no tiene en su lista, así que el cron lo salta (paso colgando).
+const gOther = await addGroup2("Saga Fate");
+await addStep2(gOther.id, { provider: "mock", slug: "frieren", from: 1, to: 1 });
+await setPublic(gOther.id, true);
 await syncNow();
 
 use(C);
 await syncNow();
+const allPublic = await searchPublicGroups(""); // patrón "**": todo lo público
+assert.equal(allPublic.length, 2, "los dos grupos públicos de A son descubribles");
 const found2 = await searchPublicGroups("Maratón");
-assert.equal(found2.length, 1);
+assert.equal(found2.length, 1, "ilike filtra de verdad: 'Maratón' no arrastra 'Saga Fate'");
 assert.equal(found2[0].name, "Maratón larga");
+assert.equal((await searchPublicGroups("Fate")).map(g => g.name).join(), "Saga Fate");
 
 const { subscribe, currentStep: curStepC, markUpTo } = await import("../extension/groups.js");
 await subscribe(found2[0], live(await get("watchlist", [])));
@@ -197,5 +207,57 @@ const rated = await searchPublicGroups("Maratón");
 assert.equal(rated[0].rating_avg, 5);
 assert.equal(rated[0].rating_count, 1);
 console.log("grupo público: descubrir, suscribirse (con auto-reparación), progreso propio y valorar OK");
+
+// Visibilidad: si A despublica el grupo, la suscripción de C sigue viva pero ni la caché de solo
+// lectura ni el cron vuelven a traer nada de él. El paso nuevo es el 30 de 'longrun', fuera de la
+// ventana MAX_AHEAD (C va por el 20), así que solo puede llegar al feed de C vía el grupo suscrito
+// — es lo que hace que estas dos aserciones distingan el filtro de un no-op.
+const { liveSubscriptions } = await import("../extension/groups.js");
+use(A);
+await setPublic(gLong.id, false);
+await addStep2(gLong.id, { provider: "mock", slug: "longrun", from: 30, to: 30 });
+await syncNow();
+
+use(C);
+await syncNow();
+assert.equal((await get("subscribed_groups", [])).length, 0, "un grupo despublicado sale de la caché");
+assert.equal(liveSubscriptions(await get("group_subscriptions", [])).length, 1,
+  "la suscripción sigue viva: la UI pinta el hueco 'Grupo ya no disponible.' con su botón de baja");
+run();
+let cXml2 = await (await fetch(cFeedUrl)).text();
+assert.doesNotMatch(cXml2, /episodio 30/, "el cron no alimenta desde un grupo despublicado");
+
+// A lo vuelve a publicar: el mismo episodio sí llega ahora (el filtro no está bloqueando todo).
+use(A);
+await setPublic(gLong.id, true);
+await syncNow();
+use(C);
+await syncNow();
+assert.equal((await get("subscribed_groups", [])).length, 1, "al republicar, la caché lo recupera");
+run();
+cXml2 = await (await fetch(cFeedUrl)).text();
+// "Longrun" (no "Long Run"): el ítem de la lista de C lo creó repairGroup() al suscribirse,
+// que deriva el título del slug (ver prettify() en groups.js).
+assert.match(cXml2, /Maratón larga: Longrun — episodio 30/);
+console.log("visibilidad: despublicar corta la caché y el feed del suscrito; republicar lo restaura");
+
+// signOut() debe limpiar TODAS las claves de cuenta. La lista vive en ACCOUNT_KEYS y este test la
+// recorre entera, así que cualquier clave nueva que se añada ahí queda cubierta sin tocar el test
+// (así se colaron sin limpiar group_subscriptions/subscribed_groups en su día: fuga entre cuentas).
+const D = machine();
+use(D);
+for (const k of Object.keys(ACCOUNT_KEYS)) await set(k, ["CENTINELA"]);
+await set("session", { access_token: "tok-x", user: { id: "x", email: "x@test.dev" } });
+await signOut();
+// Se lee el almacenamiento falso a pelo, no con store.get(): get() convierte un null guardado en
+// el valor por defecto, y aquí queremos distinguir "limpiada a null" de "no escrita".
+for (const [k, empty] of Object.entries(ACCOUNT_KEYS)) {
+  const cell = await D.storage.local.get(k);
+  assert.ok(k in cell, `signOut() no escribió "${k}"`);
+  assert.deepEqual(cell[k], empty, `signOut() no limpió "${k}"`);
+}
+assert.equal((await D.storage.local.get("session")).session, null);
+assert.ok(Object.keys(ACCOUNT_KEYS).length >= 9, "ACCOUNT_KEYS no debería adelgazar sin motivo");
+console.log("signOut limpió las", Object.keys(ACCOUNT_KEYS).length, "claves de ACCOUNT_KEYS y la sesión");
 
 console.log("TODO OK");
