@@ -27,17 +27,18 @@ let watchlistCache = [];
 const prov = id => providers.find(p => p.id === id);
 function domainOrigin(p) { const u = new URL(p.base_url); return `${u.protocol}//${u.hostname}/*`; }
 
-function watchlistOrigins(extraId) {
+function watchlistOrigins(extraIds) {
   const ids = new Set(watchlistCache.map(w => w.provider));
-  if (extraId) ids.add(extraId);
+  (Array.isArray(extraIds) ? extraIds : extraIds ? [extraIds] : []).forEach(id => ids.add(id));
   return [...new Set([...ids].map(id => prov(id)).filter(Boolean).map(domainOrigin))];
 }
 
 // Pide permiso de Chrome para los dominios de los providers en uso, en el mismo gesto de clic
 // que ya está en curso. OJO: nada de await antes de chrome.permissions.request() — por eso la
-// función no es async y usa watchlistCache. Si ya estaba concedido no muestra nada.
-function ensurePermissions(extraId) {
-  const origins = watchlistOrigins(extraId);
+// función no es async y usa watchlistCache. Si ya estaba concedido no muestra nada. extraIds
+// puede ser un id suelto o un array (ej. todos los providers de la búsqueda multi-idioma).
+function ensurePermissions(extraIds) {
+  const origins = watchlistOrigins(extraIds);
   if (!origins.length) return Promise.resolve();
   return chrome.permissions.request({ origins }).catch(e => {
     msg("No se pudo pedir el permiso: " + e.message);
@@ -60,11 +61,24 @@ $("#grantPerms").onclick = async () => {
 
 async function fillProviders() {
   providers = await get("providers", []);
-  const cur = $("#prov").value;
-  $("#prov").replaceChildren(...providers.map(p => el("option", { value: p.id, textContent: p.name || p.id })));
-  if (cur) $("#prov").value = cur;
+  await renderLangFilter();
   if (!providers.length) msg("El admin de la app aún no ha configurado ningún provider.");
 }
+
+// Un checkbox por cada idioma distinto que declaren los providers (providers sin "language"
+// caen en "?"). La selección se recuerda localmente; sin preferencia guardada, todo marcado.
+async function renderLangFilter() {
+  const langs = [...new Set(providers.map(p => p.language || "?"))].sort();
+  const saved = await get("search_languages", null);
+  $("#langFilter").replaceChildren(...langs.map(l => {
+    const cb = el("input", { type: "checkbox", checked: saved ? saved.includes(l) : true });
+    cb.dataset.lang = l;
+    cb.onchange = () => set("search_languages", selectedLangs());
+    return el("label", {}, cb, l.toUpperCase());
+  }));
+}
+
+const selectedLangs = () => [...$("#langFilter").querySelectorAll("input:checked")].map(c => c.dataset.lang);
 
 // Sincroniza si hay sesión; en modo silencioso no molesta con errores.
 async function sync(quiet = true) {
@@ -114,20 +128,24 @@ async function renderNews() {
 
 $("#go").onclick = async () => {
   const q = $("#q").value.trim();
-  const p = prov($("#prov").value);
-  if (!q || !p) return;
-  await ensurePermissions(p.id);
+  const langs = new Set(selectedLangs());
+  const targets = providers.filter(p => langs.has(p.language || "?"));
+  if (!q) return;
+  if (!targets.length) { msg("Selecciona al menos un idioma."); return; }
+  await ensurePermissions(targets.map(p => p.id));
   msg("Buscando…");
-  try {
-    const res = await engine.search(p, q);
-    msg(res.length ? "" : "Sin resultados");
-    $("#results").replaceChildren(...res.map(r => el("div", { className: "card" },
-      r.image ? el("img", { src: safe(r.image) }) : "",
-      el("div", { className: "body" }, el("b", { textContent: r.title }),
-        el("div", { className: "actions" },
-          btn("＋ Guardar", async () => { await add(r); renderList(); msg("Guardada"); sync(); }),
-          link(r.link, "Abrir"))))));
-  } catch (e) { msg("Error: " + explain(e)); }
+  const settled = await Promise.allSettled(targets.map(p =>
+    engine.search(p, q).then(res => res.map(r => ({ ...r, _providerName: p.name || p.id })))));
+  const merged = settled.flatMap(r => (r.status === "fulfilled" ? r.value : []));
+  const failed = settled.filter(r => r.status === "rejected").length;
+  msg(merged.length ? (failed ? `${failed} provider(s) fallaron al buscar` : "") : "Sin resultados");
+  $("#results").replaceChildren(...merged.map(r => el("div", { className: "card" },
+    r.image ? el("img", { src: safe(r.image) }) : "",
+    el("div", { className: "body" }, el("b", { textContent: r.title }),
+      el("div", { className: "st", textContent: r._providerName }),
+      el("div", { className: "actions" },
+        btn("＋ Guardar", async () => { await add(r); renderList(); msg("Guardada"); sync(); }),
+        link(r.link, "Abrir"))))));
 };
 $("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
 

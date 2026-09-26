@@ -22,10 +22,23 @@ const prov = id => providers.find(p => p.id === id);
 
 async function fillProviders() {
   providers = await get("providers", []);
-  const cur = $("#prov").value;
-  $("#prov").replaceChildren(...providers.map(p => el("option", { value: p.id, textContent: p.name || p.id })));
-  if (cur) $("#prov").value = cur;
+  await renderLangFilter();
 }
+
+// Un checkbox por cada idioma distinto que declaren los providers (providers sin "language"
+// caen en "?"). La selección se recuerda localmente; sin preferencia guardada, todo marcado.
+async function renderLangFilter() {
+  const langs = [...new Set(providers.map(p => p.language || "?"))].sort();
+  const saved = await get("search_languages", null);
+  $("#langFilter").replaceChildren(...langs.map(l => {
+    const cb = el("input", { type: "checkbox", checked: saved ? saved.includes(l) : true });
+    cb.dataset.lang = l;
+    cb.onchange = () => set("search_languages", selectedLangs());
+    return el("label", {}, cb, l.toUpperCase());
+  }));
+}
+
+const selectedLangs = () => [...$("#langFilter").querySelectorAll("input:checked")].map(c => c.dataset.lang);
 
 $("#tabAll").onclick = () => setView("all");
 $("#tabGroups").onclick = () => setView("groups");
@@ -376,20 +389,24 @@ $("#logout").onclick = async () => { await signOut(); await showAuth(); };
 
 $("#go").onclick = async () => {
   const q = $("#q").value.trim();
-  const p = prov($("#prov").value);
+  const langs = new Set(selectedLangs());
+  const targets = providers.filter(p => langs.has(p.language || "?"));
   $("#searchMsg").textContent = "";
-  if (!q || !p) { $("#searchMsg").textContent = "Elige un provider y escribe algo."; return; }
+  if (!q) { $("#searchMsg").textContent = "Escribe algo para buscar."; return; }
+  if (!targets.length) { $("#searchMsg").textContent = "Selecciona al menos un idioma."; return; }
   $("#searchMsg").textContent = "Buscando…";
-  try {
-    const res = await engine.search(p, q);
-    $("#searchMsg").textContent = res.length ? "" : "Sin resultados";
-    $("#results").replaceChildren(...res.map(r => el("div", { className: "card" },
-      r.image ? el("img", { src: safe(r.image) }) : "",
-      el("div", { className: "body" }, el("b", { textContent: r.title }),
-        el("div", { className: "actions" },
-          btn("＋ Guardar", async () => { await add(r); await renderList(); requestSync(); $("#searchMsg").textContent = "Guardada"; }),
-          link(r.link, "Abrir"))))));
-  } catch (e) { $("#searchMsg").textContent = "Error: " + explain(e); }
+  const settled = await Promise.allSettled(targets.map(p =>
+    engine.search(p, q).then(res => res.map(r => ({ ...r, _providerName: p.name || p.id })))));
+  const merged = settled.flatMap(r => (r.status === "fulfilled" ? r.value : []));
+  const failed = settled.filter(r => r.status === "rejected").length;
+  $("#searchMsg").textContent = merged.length ? (failed ? `${failed} provider(s) fallaron al buscar` : "") : "Sin resultados";
+  $("#results").replaceChildren(...merged.map(r => el("div", { className: "card" },
+    r.image ? el("img", { src: safe(r.image) }) : "",
+    el("div", { className: "body" }, el("b", { textContent: r.title }),
+      el("div", { className: "hint", textContent: r._providerName }),
+      el("div", { className: "actions" },
+        btn("＋ Guardar", async () => { await add(r); await renderList(); requestSync(); $("#searchMsg").textContent = "Guardada"; }),
+        link(r.link, "Abrir"))))));
 };
 $("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
 

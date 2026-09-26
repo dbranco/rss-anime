@@ -56,3 +56,6 @@ pre { font-size: .8rem; white-space: pre-wrap; background: color-mix(in srgb, cu
 details summary { cursor: pointer; font-size: .9rem; margin: 8px 0; }
 #importRows .row { align-items: center; }
 #importRows input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+#langFilter { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 8px; }
+#langFilter label { display: flex; align-items: center; gap: 4px; font-size: .85rem; }
+#langFilter input { width: auto; }
