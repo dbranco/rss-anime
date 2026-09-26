@@ -69,8 +69,12 @@ class H(BaseHTTPRequestHandler):
             pk = q["on_conflict"][0].split(",")
             prefer = self.headers.get("Prefer", "")
             table = TABLES.setdefault(m[1], [])
+            is_admin = uid in {r.get("user_id") for r in TABLES.get("admins", [])}
             for row in json.loads(data):
-                if kind == "user" and row.get("user_id") != uid:
+                if m[1] == "app_config":
+                    if kind == "user" and not is_admin:
+                        return self.send(403, {"message": "RLS: solo admin puede escribir app_config"})
+                elif kind == "user" and row.get("user_id") != uid:
                     return self.send(403, {"message": "RLS: new row violates policy"})
                 cur = next((r for r in table if all(r.get(k) == row.get(k) for k in pk)), None)
                 if cur:
@@ -100,7 +104,7 @@ class H(BaseHTTPRequestHandler):
             if not kind:
                 return self.send(401, {"message": "no auth"})
             rows = list(TABLES.get(m[1], []))
-            if kind == "user":  # simula RLS
+            if kind == "user" and m[1] != "app_config":  # simula RLS (app_config: lectura abierta)
                 rows = [r for r in rows if r.get("user_id") == uid]
             q = parse_qs(u.query)
             for col, vals in q.items():

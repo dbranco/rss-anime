@@ -60,14 +60,15 @@ async function publish(token, xml) {
   console.log(process.env.SHOW_URL === "1" ? `Feed: ${url}` : `Feed publicado (…${token.slice(-4)})`);
 }
 
-const settings = await rest("user_settings?select=user_id,providers,feed_token");
+const [appConfig] = await rest("app_config?select=providers&id=eq.1");
+const providers = appConfig?.providers || [];
+const settings = await rest("user_settings?select=user_id,feed_token");
 const watch = await rest("watchlist?select=*&deleted=eq.false");
 const found = await rest("episodes_found?select=*&order=found_at.desc");
 const groups = await rest("groups?select=*&deleted=eq.false");
 
 for (const st of settings) {
   try {
-    const providers = st.providers || [];
     const mine = watch.filter(w => w.user_id === st.user_id);
     const known = found.filter(f => f.user_id === st.user_id);
     const fresh = [];

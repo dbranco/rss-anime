@@ -77,30 +77,38 @@ async function rest(path, { method = "GET", body, prefer } = {}) {
   return t ? JSON.parse(t) : null;
 }
 
-async function syncSettings(uid) {
-  const [remote] = await rest(`user_settings?select=providers,updated_at&user_id=eq.${uid}`);
-  const providers = await get("providers", []);
-  const localTs = await get("providers_updated_at", null);
-
-  const push = async t => {
-    await rest("user_settings?on_conflict=user_id", {
-      method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
-      body: [{ user_id: uid, providers, updated_at: t }]
-    });
-    await set("providers_updated_at", t);
-  };
-  const pull = async () => {
-    await set("providers", remote.providers || []);
-    await set("providers_updated_at", remote.updated_at);
-  };
-
-  if (!remote) await push(localTs || now());
-  else if (!localTs) await pull();
-  else if (ts(localTs) > ts(remote.updated_at)) await push(localTs);
-  else if (ts(remote.updated_at) > ts(localTs)) await pull();
-
+// Asegura que exista la fila de user_settings del usuario (para su feed_token) y lo lee.
+// providers ya no vive aquí: ver syncAppConfig.
+async function syncFeedToken(uid) {
   const [row] = await rest(`user_settings?select=feed_token&user_id=eq.${uid}`);
-  if (row?.feed_token) await set("feed_token", row.feed_token);
+  if (row?.feed_token) { await set("feed_token", row.feed_token); return; }
+  await rest("user_settings?on_conflict=user_id", {
+    method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+    body: [{ user_id: uid }]
+  });
+  const [created] = await rest(`user_settings?select=feed_token&user_id=eq.${uid}`);
+  if (created?.feed_token) await set("feed_token", created.feed_token);
+}
+
+// providers es config de la app (no por usuario): todos hacen pull de app_config,
+// solo el admin (fila en `admins`) puede escribir con saveAppProviders().
+async function syncAppConfig(uid) {
+  const [row] = await rest("app_config?select=providers,updated_at&id=eq.1");
+  await set("providers", row?.providers || []);
+  await set("providers_updated_at", row?.updated_at || null);
+  const adminRows = await rest(`admins?select=user_id&user_id=eq.${uid}`);
+  await set("is_admin", adminRows.length > 0);
+}
+
+export async function saveAppProviders(arr) {
+  await session();
+  const t = now();
+  await rest("app_config?on_conflict=id", {
+    method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+    body: [{ id: 1, providers: arr, updated_at: t }]
+  });
+  await set("providers", arr);
+  await set("providers_updated_at", t);
 }
 
 async function syncWatchlist(uid) {
@@ -159,7 +167,8 @@ async function syncGroups(uid) {
 
 export async function syncNow() {
   const s = await session();
-  await syncSettings(s.user.id);
+  await syncFeedToken(s.user.id);
+  await syncAppConfig(s.user.id);
   await syncWatchlist(s.user.id);
   await syncGroups(s.user.id);
   await set("last_sync", now());

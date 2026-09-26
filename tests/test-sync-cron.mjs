@@ -16,19 +16,27 @@ const A = machine(), B = machine();
 const use = m => { globalThis.chrome = m; };
 
 const { get, set } = await import("../extension/store.js");
-const { signUp, signIn, syncNow } = await import("../extension/sync.js");
+const { signUp, signIn, syncNow, saveAppProviders } = await import("../extension/sync.js");
 const { add, mutate, live } = await import("../extension/list.js");
 const providers = JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8"));
 
-// Máquina A: cuenta nueva, providers y una serie
+// Da de alta a un usuario como admin usando la service key (bypassa RLS, igual que hace
+// la persona real por SQL Editor con la cuenta de Postgres).
+const seedAdmin = uid => fetch(`${SB}/rest/v1/admins?on_conflict=user_id`, {
+  method: "POST",
+  headers: { Authorization: "Bearer service-key", "Content-Type": "application/json" },
+  body: JSON.stringify([{ user_id: uid }])
+});
+
+// Máquina A: cuenta nueva, se marca admin, sube providers (config de la app) y una serie
 use(A);
 await set("supabase", { url: SB, anonKey: "anon" });
 assert.equal((await signUp("dbranco@test.dev", "secreto123")).confirmed, true);
-await set("providers", providers);
-await set("providers_updated_at", new Date().toISOString());
+await seedAdmin((await get("session")).user.id);
+await saveAppProviders(providers);
 await add({ provider: "mock", slug: "re-zero", title: "Re:Zero", link: "http://127.0.0.1:8001/blabla/re-zero", image: null });
 await syncNow();
-console.log("A subió providers y lista");
+console.log("A (admin) subió providers y lista");
 
 // A crea un grupo con un paso
 const { addGroup, addStep, live: liveGroups } = await import("../extension/groups.js");
@@ -43,6 +51,7 @@ await set("supabase", { url: SB, anonKey: "anon" });
 await signIn("dbranco@test.dev", "secreto123");
 await syncNow();
 assert.equal((await get("providers", [])).length, 1);
+assert.equal(await get("is_admin", false), true); // misma cuenta que A: también admin
 assert.equal(live(await get("watchlist", [])).length, 1);
 assert.ok(await get("feed_token"));
 const groupsB = liveGroups(await get("groups", []));
@@ -121,5 +130,16 @@ run();
 xml = await (await fetch(feedUrl)).text();
 assert.equal(count(xml), countAfterGroup, "sin duplicados en la segunda pasada del grupo");
 console.log("grupo: sin duplicados en la segunda pasada");
+
+// Máquina C: cuenta distinta, NO admin — recibe los providers en solo lectura y no puede escribir
+const C = machine();
+use(C);
+await set("supabase", { url: SB, anonKey: "anon" });
+assert.equal((await signUp("otra@test.dev", "secreto123")).confirmed, true);
+await syncNow();
+assert.equal((await get("providers", [])).length, 1);
+assert.equal(await get("is_admin", false), false);
+await assert.rejects(() => saveAppProviders([{ id: "hack" }]), /solo admin/);
+console.log("C (no admin) recibió providers en solo lectura y no pudo escribir");
 
 console.log("TODO OK");
