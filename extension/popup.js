@@ -290,7 +290,8 @@ $("#importSearchBtn").onclick = async () => {
 
 $("#saveGroupBtn").onclick = async () => {
   const name = $("#groupName").value.trim();
-  if (!name || !draftSteps.length) { msg("Ponle nombre y al menos un paso"); return; }
+  if (!name) { msg("Ponle un nombre al grupo"); return; }
+  if (!draftSteps.length) { msg("Añade al menos un paso: usa ＋ Añadir paso, o Buscar + elegir resultado si vienes del JSON"); return; }
   const g = await groups.addGroup(name);
   for (const s of draftSteps) await groups.addStep(g.id, s);
   $("#groupForm").hidden = true;
