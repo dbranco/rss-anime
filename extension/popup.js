@@ -423,6 +423,10 @@ $("#newGroup").onclick = async () => {
   const items = live(await get("watchlist", []));
   $("#stepItem").replaceChildren(...items.map(it =>
     el("option", { value: `${it.provider}|${it.slug}`, textContent: it.title })));
+  $("#stepSearchProv").replaceChildren(...providers.map(p =>
+    el("option", { value: p.id, textContent: `${p.name || p.id} (${(p.language || "?").toUpperCase()})` })));
+  $("#stepSearchQ").value = "";
+  $("#stepSearchResults").replaceChildren();
   importDraft = [];
   $("#importJson").value = "";
   $("#importAssign").hidden = true;
@@ -443,17 +447,44 @@ function renderDraftSteps() {
     btn("✕", () => { draftSteps.splice(i, 1); renderDraftSteps(); }))));
 }
 
+const readRange = () => ({
+  from: +$("#stepFrom").value || 1,
+  to: +$("#stepTo").value || 1,
+  exclude: $("#stepExclude").value.split(",").map(s => +s.trim()).filter(Boolean)
+});
+const clearRange = () => { $("#stepFrom").value = "1"; $("#stepTo").value = "1"; $("#stepExclude").value = ""; };
+
 $("#addStepBtn").onclick = () => {
   const [provider, slug] = ($("#stepItem").value || "").split("|");
   if (!provider) return;
-  const from = +$("#stepFrom").value || 1;
-  const to = +$("#stepTo").value || 1;
-  const exclude = $("#stepExclude").value.split(",").map(s => +s.trim()).filter(Boolean);
-  draftSteps.push({ provider, slug, from, to, exclude });
-  $("#stepFrom").value = "1";
-  $("#stepTo").value = "1";
-  $("#stepExclude").value = "";
+  draftSteps.push({ provider, slug, ...readRange() });
+  clearRange();
   renderDraftSteps();
+};
+
+// Alternativa a "elige de tu lista": buscar directamente en un provider concreto y añadir el
+// paso con ESE provider+slug, sin tocar la entrada de esa serie que ya tuvieras (si la tenías
+// con otro provider). Igual que hace el asistente de import, guarda en la lista antes de
+// añadir el paso — si no, el paso apuntaría a un ítem que no existe.
+$("#stepSearchBtn").onclick = async () => {
+  const p = prov($("#stepSearchProv").value);
+  const q = $("#stepSearchQ").value.trim();
+  if (!p || !q) return;
+  await ensurePermissions(p.id);
+  $("#stepSearchResults").replaceChildren("Buscando…");
+  try {
+    const res = await engine.search(p, q);
+    $("#stepSearchResults").replaceChildren(...(res.length
+      ? res.map(r => btn(r.title, async () => {
+          await add(r);
+          draftSteps.push({ provider: r.provider, slug: r.slug, ...readRange() });
+          clearRange();
+          renderDraftSteps();
+          $("#stepSearchResults").replaceChildren();
+          $("#stepSearchQ").value = "";
+        }))
+      : ["Sin resultados"]));
+  } catch (e) { $("#stepSearchResults").replaceChildren("Error: " + explain(e)); }
 };
 
 let importDraft = [];
