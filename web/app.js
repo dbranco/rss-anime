@@ -3,7 +3,7 @@ import * as engine from "../extension/engine.js";
 import { get, set } from "../extension/store.js";
 import { live, add, mutate } from "../extension/list.js";
 import * as groups from "../extension/groups.js";
-import { signIn, signUp, signOut, getSession, syncNow, saveAppProviders } from "../extension/sync.js";
+import { signIn, signUp, signOut, getSession, syncNow, saveAppProviders, searchPublicGroups, rateGroup } from "../extension/sync.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -41,19 +41,21 @@ async function renderLangFilter() {
 const selectedLangs = () => [...$("#langFilter").querySelectorAll("input:checked")].map(c => c.dataset.lang);
 
 $("#tabAll").onclick = () => setView("all");
-$("#tabGroups").onclick = () => setView("groups");
+$("#tabExplore").onclick = () => setView("explore");
 $("#tabConfig").onclick = () => setView("config");
 
 function setView(v) {
   $("#allView").hidden = v !== "all";
-  $("#groupsView").hidden = v !== "groups";
+  $("#exploreView").hidden = v !== "explore";
   $("#configView").hidden = v !== "config";
   $("#tabAll").classList.toggle("active", v === "all");
-  $("#tabGroups").classList.toggle("active", v === "groups");
+  $("#tabExplore").classList.toggle("active", v === "explore");
   $("#tabConfig").classList.toggle("active", v === "config");
-  if (v === "groups") renderGroups();
+  if (v === "all") renderMain();
   if (v === "config") renderConfig();
 }
+
+$("#listFilter").addEventListener("change", () => { listFilter = document.querySelector('input[name="listf"]:checked').value; listPage = 0; renderMain(); });
 
 async function renderConfig() {
   $("#providersJson").value = JSON.stringify(await get("providers", []), null, 2);
@@ -78,48 +80,45 @@ $("#saveProvidersBtn").onclick = async () => {
   $("#configMsg").textContent = "Guardado.";
 };
 
-async function renderList() {
-  const list = live(await get("watchlist", []));
-  $("#list").replaceChildren(...list.map(item => {
-    const st = el("div", { className: "msg" });
-    const eps = el("div", { className: "eps" });
-    return el("div", { className: "card" },
-      item.image ? el("img", { src: safe(item.image) }) : "",
-      el("div", { className: "body" },
-        el("b", { textContent: item.title }),
-        el("div", { className: "hint", textContent: "Visto hasta el episodio " + (item.last || 0) }),
-        el("div", { className: "actions" },
-          btn("Siguiente", async () => {
-            const p = prov(item.provider);
-            const n = (item.last || 0) + 1;
-            st.textContent = "Comprobando…";
-            try {
-              const r = await engine.checkEpisode(p, item.slug, n);
-              st.replaceChildren(r.exists ? link(r.url, `Ep ${n} disponible ▶`) : `Ep ${n}: aún no`);
-            } catch (e) { st.textContent = "Error: " + explain(e); }
-          }),
-          btn("Episodios", async () => {
-            eps.textContent = "Cargando…";
-            try {
-              const l = await engine.episodes(prov(item.provider), item.slug);
-              eps.replaceChildren(...(l.length ? l.map(e => {
-                const a = link(e.link, String(e.number));
-                if (e.number <= (item.last || 0)) a.className = "seen";
-                return a;
-              }) : ["Sin episodios"]));
-            } catch (e) { eps.textContent = "Error: " + explain(e); }
-          }),
-          btn("Visto +1", async () => {
-            const it = await mutate(item.provider, item.slug, x => { x.last = (x.last || 0) + 1; });
-            if (it) {
-              const news = await get("news", []);
-              await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
-            }
-            renderList(); requestSync();
-          }),
-          btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderList(); requestSync(); })),
-        st, eps));
-  }));
+function itemCard(item) {
+  const st = el("div", { className: "msg" });
+  const eps = el("div", { className: "eps" });
+  return el("div", { className: "card" },
+    item.image ? el("img", { src: safe(item.image) }) : "",
+    el("div", { className: "body" },
+      el("b", { textContent: item.title }),
+      el("div", { className: "hint", textContent: "Visto hasta el episodio " + (item.last || 0) }),
+      el("div", { className: "actions" },
+        btn("Siguiente", async () => {
+          const p = prov(item.provider);
+          const n = (item.last || 0) + 1;
+          st.textContent = "Comprobando…";
+          try {
+            const r = await engine.checkEpisode(p, item.slug, n);
+            st.replaceChildren(r.exists ? link(r.url, `Ep ${n} disponible ▶`) : `Ep ${n}: aún no`);
+          } catch (e) { st.textContent = "Error: " + explain(e); }
+        }),
+        btn("Episodios", async () => {
+          eps.textContent = "Cargando…";
+          try {
+            const l = await engine.episodes(prov(item.provider), item.slug);
+            eps.replaceChildren(...(l.length ? l.map(e => {
+              const a = link(e.link, String(e.number));
+              if (e.number <= (item.last || 0)) a.className = "seen";
+              return a;
+            }) : ["Sin episodios"]));
+          } catch (e) { eps.textContent = "Error: " + explain(e); }
+        }),
+        btn("Visto +1", async () => {
+          const it = await mutate(item.provider, item.slug, x => { x.last = (x.last || 0) + 1; });
+          if (it) {
+            const news = await get("news", []);
+            await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+          }
+          renderMain(); requestSync();
+        }),
+        btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderMain(); requestSync(); })),
+      st, eps));
 }
 
 const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169"];
@@ -206,7 +205,7 @@ function renderEpisodePanel(g, sel, onChange) {
               try { renderPlayerPicker(playerBox, await engine.episodePlayers(p, sel.step.slug, sel.episode)); }
               catch (e) { playerBox.textContent = "Error: " + explain(e); }
             }) : "",
-        btn("Cerrar", () => { itinSel.delete(g.id); renderGroups(); })),
+        btn("Cerrar", () => { itinSel.delete(g.id); renderMain(); })),
       playerBox));
 }
 
@@ -234,7 +233,7 @@ function renderItinerary(g, cur, watchlist, onChange) {
     // Un toque selecciona/abre la tarjeta de acción; toca otra vez para cerrarla.
     badge.onclick = () => {
       itinSel.set(g.id, isSel ? null : { step: e.step, episode: e.episode, item: e.item, seen: e.seen });
-      renderGroups();
+      renderMain();
     };
     return badge;
   });
@@ -243,62 +242,140 @@ function renderItinerary(g, cur, watchlist, onChange) {
     el("div", { className: "itin" }, ...badges),
     pages > 1
       ? el("div", { className: "row hint" },
-          btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderGroups(); }),
+          btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderMain(); }),
           el("span", { textContent: `Página ${page + 1} de ${pages}` }),
-          btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderGroups(); }))
+          btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderMain(); }))
       : "",
     sel ? renderEpisodePanel(g, sel, onChange) : "");
 }
 
-async function renderGroups() {
-  const list = groups.live(await get("groups", []));
+function groupCard(g, watchlist, owned) {
+  const cur = groups.currentStep(g, watchlist);
+  const st = el("div", { className: "msg" });
+  const onMark = async (step, episode) => {
+    const it = await groups.markUpTo(step, episode);
+    if (it) {
+      const news = await get("news", []);
+      await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+    }
+    renderMain(); requestSync();
+  };
+  const body = !cur
+    ? el("div", { textContent: "✓ Terminado" })
+    : el("div", {},
+        el("div", { textContent:
+          `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
+          `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
+        cur.item
+          ? el("div", { className: "actions" },
+              btn("Siguiente", async () => {
+                const p = prov(cur.step.provider);
+                st.textContent = "Comprobando…";
+                try {
+                  const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
+                  st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
+                } catch (e) { st.textContent = "Error: " + explain(e); }
+              }),
+              btn("Visto", () => onMark(cur.step, cur.next)))
+          : el("div", { className: "hint",
+              textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
+        st);
+  const missing = groups.missingSteps(g, watchlist);
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: g.name }),
+      owned ? "" : el("div", { className: "hint", textContent: `de ${String(g.user_id || "").slice(0, 8)}…` }),
+      missing.length
+        ? el("div", { className: "hint" },
+            `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
+            btn("Reparar", async () => { await groups.repairGroup(g, watchlist); renderMain(); requestSync(); }))
+        : "",
+      renderAvatars(g, cur, watchlist),
+      body,
+      renderItinerary(g, cur, watchlist, () => { renderMain(); requestSync(); }),
+      el("div", { className: "actions" },
+        owned
+          ? btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderMain(); requestSync(); })
+          : btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); renderMain(); requestSync(); }))));
+}
+
+const LIST_PAGE_SIZE = 10;
+let listFilter = "both";
+let listPage = 0;
+
+async function renderMain() {
   const watchlist = live(await get("watchlist", []));
-  $("#groups").replaceChildren(...list.map(g => {
-    const cur = groups.currentStep(g, watchlist);
-    const st = el("div", { className: "msg" });
-    const onMark = async (step, episode) => {
-      const it = await groups.markUpTo(step, episode);
-      if (it) {
-        const news = await get("news", []);
-        await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
-      }
-      renderGroups(); requestSync();
-    };
-    const body = !cur
-      ? el("div", { textContent: "✓ Terminado" })
-      : el("div", {},
-          el("div", { textContent:
-            `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
-            `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
-          cur.item
-            ? el("div", { className: "actions" },
-                btn("Siguiente", async () => {
-                  const p = prov(cur.step.provider);
-                  st.textContent = "Comprobando…";
-                  try {
-                    const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
-                    st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
-                  } catch (e) { st.textContent = "Error: " + explain(e); }
-                }),
-                btn("Visto", () => onMark(cur.step, cur.next)))
-            : el("div", { className: "hint",
-                textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
-          st);
-    const missing = groups.missingSteps(g, watchlist);
-    return el("div", { className: "card" },
-      el("div", { className: "body" },
-        el("b", { textContent: g.name }),
-        missing.length
-          ? el("div", { className: "hint" },
-              `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
-              btn("Reparar", async () => { await groups.repairGroup(g, watchlist); renderGroups(); requestSync(); }))
-          : "",
-        renderAvatars(g, cur, watchlist),
-        body,
-        renderItinerary(g, cur, watchlist, () => { renderGroups(); requestSync(); }),
-        el("div", { className: "actions" },
-          btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderGroups(); requestSync(); }))));
-  }));
+  const myGroups = groups.live(await get("groups", []));
+  const subGroups = await get("subscribed_groups", []);
+  const entries = [];
+  if (listFilter !== "groups") entries.push(...watchlist.map(item => ({ kind: "item", data: item, ts: item.updated_at })));
+  if (listFilter !== "media") {
+    entries.push(...myGroups.map(g => ({ kind: "group", data: g, owned: true, ts: g.updated_at })));
+    entries.push(...subGroups.map(g => ({ kind: "group", data: g, owned: false, ts: g.updated_at })));
+  }
+  entries.sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+
+  const pages = Math.max(1, Math.ceil(entries.length / LIST_PAGE_SIZE));
+  listPage = Math.min(listPage, pages - 1);
+  const start = listPage * LIST_PAGE_SIZE;
+  const page = entries.slice(start, start + LIST_PAGE_SIZE);
+
+  $("#list").replaceChildren(...(page.length
+    ? page.map(e => (e.kind === "item" ? itemCard(e.data) : groupCard(e.data, watchlist, e.owned)))
+    : ["Nada que mostrar con este filtro."]));
+  $("#listPager").replaceChildren(
+    btn("◀", () => { listPage = Math.max(0, listPage - 1); renderMain(); }),
+    el("span", { textContent: `Página ${listPage + 1} de ${pages}` }),
+    btn("▶", () => { listPage = Math.min(pages - 1, listPage + 1); renderMain(); }));
+}
+
+const EXPLORE_PAGE_SIZE = 10;
+let exploreResults = [];
+let explorePage = 0;
+
+$("#exploreBtn").onclick = async () => {
+  const q = $("#exploreQ").value.trim();
+  $("#exploreResults").replaceChildren("Buscando…");
+  try {
+    exploreResults = await searchPublicGroups(q);
+    explorePage = 0;
+    renderExplore();
+  } catch (e) { $("#exploreResults").replaceChildren("Error: " + explain(e)); }
+};
+
+function exploreCard(g) {
+  const st = el("div", { className: "hint" });
+  const stars = el("select", {});
+  stars.replaceChildren(...[1, 2, 3, 4, 5].map(n => el("option", { value: n, textContent: `${n} ★` })));
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: g.name }),
+      el("div", { className: "hint", textContent:
+        g.rating_count ? `${g.rating_avg.toFixed(1)} ★ (${g.rating_count})` : "Sin valoraciones" }),
+      el("div", { className: "actions" },
+        btn("Suscribirme", async () => {
+          await groups.subscribe(g, live(await get("watchlist", [])));
+          st.textContent = "Suscrito.";
+          requestSync();
+        }),
+        stars,
+        btn("Valorar", async () => {
+          try { await rateGroup(g.user_id, g.id, +stars.value); st.textContent = "Gracias por valorar."; }
+          catch (e) { st.textContent = "Error: " + explain(e); }
+        })),
+      st));
+}
+
+function renderExplore() {
+  const pages = Math.max(1, Math.ceil(exploreResults.length / EXPLORE_PAGE_SIZE));
+  explorePage = Math.min(explorePage, pages - 1);
+  const start = explorePage * EXPLORE_PAGE_SIZE;
+  const page = exploreResults.slice(start, start + EXPLORE_PAGE_SIZE);
+  $("#exploreResults").replaceChildren(...(page.length ? page.map(exploreCard) : ["Sin resultados"]));
+  $("#explorePager").replaceChildren(
+    btn("◀", () => { explorePage = Math.max(0, explorePage - 1); renderExplore(); }),
+    el("span", { textContent: `Página ${explorePage + 1} de ${pages}` }),
+    btn("▶", () => { explorePage = Math.min(pages - 1, explorePage + 1); renderExplore(); }));
 }
 
 async function renderFeed() {
@@ -325,9 +402,8 @@ async function sync(quiet = true) {
   try {
     await requestSync();
     $("#cloud").textContent = "✓";
-    await fillProviders(); await renderList(); await renderFeed();
+    await fillProviders(); await renderMain(); await renderFeed();
     await applyAdminVisibility();
-    if (!$("#groupsView").hidden) renderGroups();
   } catch (e) {
     $("#cloud").textContent = "⚠";
     if (!quiet) $("#authMsg").textContent = "Error de sync: " + explain(e);
@@ -339,7 +415,7 @@ async function showMain() {
   $("#authView").hidden = true;
   $("#mainView").hidden = false;
   $("#who").textContent = s.user.email;
-  await fillProviders(); await renderList(); await renderFeed();
+  await fillProviders(); await renderMain(); await renderFeed();
   sync();
 }
 
@@ -384,7 +460,7 @@ $("#go").onclick = async () => {
     el("div", { className: "body" }, el("b", { textContent: r.title }),
       el("div", { className: "hint", textContent: r._providerName }),
       el("div", { className: "actions" },
-        btn("＋ Guardar", async () => { await add(r); await renderList(); requestSync(); $("#searchMsg").textContent = "Guardada"; }),
+        btn("＋ Guardar", async () => { await add(r); await renderMain(); requestSync(); $("#searchMsg").textContent = "Guardada"; }),
         link(r.link, "Abrir"))))));
 };
 $("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
@@ -400,6 +476,7 @@ let draftSteps = [];
 $("#newGroup").onclick = async () => {
   draftSteps = [];
   $("#groupName").value = "";
+  $("#groupPublic").checked = false;
   $("#stepFrom").value = "1";
   $("#stepTo").value = "1";
   $("#stepExclude").value = "";
@@ -534,8 +611,9 @@ $("#saveGroupBtn").onclick = async () => {
   if (!draftSteps.length) { $("#groupMsg").textContent = "Añade al menos un paso: usa ＋ Añadir paso, o Buscar + elegir resultado si vienes del JSON"; return; }
   const g = await groups.addGroup(name);
   for (const s of draftSteps) await groups.addStep(g.id, s);
+  if ($("#groupPublic").checked) await groups.setPublic(g.id, true);
   $("#groupForm").hidden = true;
-  renderGroups();
+  renderMain();
   requestSync();
 };
 
