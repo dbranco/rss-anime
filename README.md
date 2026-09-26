@@ -5,7 +5,7 @@ Tres piezas que comparten el mismo motor de scraping (`extension/engine.js`):
 | Pieza | Para qué |
 |---|---|
 | `extension/` | Extensión Chromium (MV3): buscas, guardas series, ves episodios y recibes notificaciones |
-| `supabase/schema.sql` | Tablas + RLS para tener lista y providers en todas tus máquinas |
+| `supabase/schema.sql` | Tablas + RLS: lista y grupos por usuario, providers compartidos por toda la app |
 | `cron/generate-feed.mjs` | Revisa la lista de cada usuario en Supabase y publica su feed RSS |
 
 RSS = canal de avisos (funciona con el PC apagado, se lee desde cualquier lector). Extensión = interfaz
@@ -22,12 +22,29 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 
 ## 2. Extensión
 1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `extension/`.
-2. ⚙ Opciones: edita el provider (JSON) y guarda (acepta el permiso del dominio).
+2. Solo la cuenta admin edita providers (⚙ Opciones en la extensión, o Config en la PWA): pega
+   el JSON y guarda (acepta el permiso del dominio). El resto de cuentas los reciben ya listos
+   al sincronizar — ver "Providers como config de la app" más abajo.
 3. En "Sincronización": URL + anon key de Supabase, email y contraseña → Crear cuenta / Iniciar sesión.
    En cada máquina nueva: instala la extensión y solo inicia sesión; providers y lista llegan solos.
 4. Opciones muestra la URL de tu feed RSS cuando el cron ya lo ha generado.
 
 Conflictos: gana el cambio más reciente (`updated_at`). Los borrados se propagan (`deleted`).
+
+### Providers como config de la app
+
+`providers` (qué sitios sabe scrapear la app) no es por usuario: es una configuración
+compartida que mantiene una cuenta admin. El resto de cuentas la reciben en solo lectura al
+sincronizar — ni siquiera ven la sección en Opciones/Config.
+
+Para marcarte admin (una vez, por SQL Editor, después de ejecutar `supabase/schema.sql`):
+
+```sql
+insert into admins (user_id) select id from auth.users where email = 'tu@email.com';
+```
+
+Luego, en Opciones (extensión) o Config (PWA), pega el JSON de tus providers y Guardar. Ver
+`docs/superpowers/specs/2026-09-26-app-wide-providers-design.md` para el detalle completo.
 
 ### Grupos
 La pestaña "Grupos" (popup y PWA) son playlists de orden de visionado: reordenan y filtran ítems que ya
