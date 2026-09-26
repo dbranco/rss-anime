@@ -1,0 +1,13 @@
+[
+  {
+    "id": "mock-mirror",
+    "name": "Mock local mirror (pruebas)",
+    "base_url": "http://127.0.0.1:8001",
+    "search": { "url": "{base_url}/catalogo?search={query}", "item": ".card", "link": "a", "title": ".card-title", "image": "img", "slug_regex": "/blabla/([\\w-]+)$" },
+    "series": { "url": "{base_url}/blabla/{slug}", "item": ".episodes a", "link": "self", "number_regex": "/(\\d+)$" },
+    "episode": {
+      "url": "{base_url}/mirrorep/{slug}/{episode}",
+      "mirror_select": { "default_selector": "#embed_holder iframe", "option_selector": "select.mirror option" }
+    }
+  }
+]

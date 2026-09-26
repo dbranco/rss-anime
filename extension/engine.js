@@ -85,26 +85,54 @@ export async function checkEpisode(p, slug, episode) {
 }
 
 // Servidores de streaming embebibles del episodio (SUB/DUB), si el provider los expone.
-// No todos los servidores que lista un sitio sirven para esto: muchos (ej. Mega) son solo de
-// descarga y bloquean que su página se cargue en un iframe de otro sitio. El provider declara
-// `episode.embeds_regex` para capturar el bloque JS con los que SÍ son embebibles; sin ese
-// campo, la función devuelve null (el provider simplemente no soporta esto).
-// El bloque capturado no es JSON válido (claves sin comillas: embeds:{SUB:[{server:"..."}]}),
-// así que en vez de intentar convertirlo a JSON se extrae cada par server/url con su propio
-// regex, más simple y robusto que un parser de objetos JS.
+// Dos mecanismos posibles, mutuamente excluyentes según qué declare el provider:
+//
+// - `episode.embeds_regex` (ej. AnimeAV1): un bloque JS embebido en la página con las claves
+//   sin comillas (embeds:{SUB:[{server:"..."}]}), del que se extrae cada par server/url con
+//   su propio regex en vez de intentar convertirlo a JSON (más simple y robusto).
+// - `episode.mirror_select` (ej. AnimeFlix): un iframe por defecto ya en el HTML más un
+//   <select> cuyas <option> llevan el iframe codificado en base64 en su atributo value. No
+//   distingue SUB/DUB, así que todos los servidores van al bucket SUB.
+//
+// Muchos servidores que lista un sitio no sirven para esto (ej. Mega): son solo de descarga y
+// bloquean que su página se cargue en un iframe de otro sitio. Un provider que no declara
+// ninguno de los dos campos simplemente no soporta esto y la función devuelve null.
 export async function episodePlayers(p, slug, episode) {
   const e = p.episode;
-  if (!e.embeds_regex) return null;
+  if (!e.embeds_regex && !e.mirror_select) return null;
   const url = fill(p, e.url, { slug, episode });
   const { html } = await fetchHtml(p, url);
-  const m = new RegExp(e.embeds_regex).exec(html);
-  if (!m) return null;
-  const blob = m[1];
-  const track = t => {
-    const tm = new RegExp(`${t}:\\[(.*?)\\]`).exec(blob);
-    if (!tm) return [];
-    return [...tm[1].matchAll(/\{server:"([^"]+)",url:"([^"]+)"\}/g)].map(x => ({ server: x[1], url: x[2] }));
+
+  if (e.embeds_regex) {
+    const m = new RegExp(e.embeds_regex).exec(html);
+    if (!m) return null;
+    const blob = m[1];
+    const track = t => {
+      const tm = new RegExp(`${t}:\\[(.*?)\\]`).exec(blob);
+      if (!tm) return [];
+      return [...tm[1].matchAll(/\{server:"([^"]+)",url:"([^"]+)"\}/g)].map(x => ({ server: x[1], url: x[2] }));
+    };
+    const SUB = track("SUB"), DUB = track("DUB");
+    return (SUB.length || DUB.length) ? { SUB, DUB } : null;
+  }
+
+  const { default_selector, option_selector } = e.mirror_select;
+  const d = doc(html);
+  const servers = [], seen = new Set();
+  const addSrc = (src, name) => {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    servers.push({ server: name, url: abs(src, url) });
   };
-  const SUB = track("SUB"), DUB = track("DUB");
-  return (SUB.length || DUB.length) ? { SUB, DUB } : null;
+  const def = default_selector && d.querySelector(default_selector);
+  if (def) addSrc(def.getAttribute("src"), "Default");
+  for (const opt of d.querySelectorAll(option_selector)) {
+    const v = opt.getAttribute("value");
+    if (!v) continue;
+    let decoded;
+    try { decoded = atob(v); } catch { continue; }
+    const sm = /src="([^"]+)"/.exec(decoded);
+    if (sm) addSrc(sm[1], clean(opt.textContent) || `Server ${servers.length + 1}`);
+  }
+  return servers.length ? { SUB: servers, DUB: [] } : null;
 }

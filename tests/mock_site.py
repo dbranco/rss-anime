@@ -1,4 +1,5 @@
 """Web falsa para probar el motor: python tests/mock_site.py  (puerto 8001)"""
+import base64
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -44,6 +45,19 @@ class H(BaseHTTPRequestHandler):
             )
             return self._send(200, f"<html><body><video src='x.mp4'></video>"
                                f"<script>window.__DATA__={{{payload}}}</script></body></html>")
+        m = re.fullmatch(r"/mirrorep/([\w-]+)/(\d+)", u.path)
+        if m and m[1] in SERIES and int(m[2]) <= SERIES[m[1]][1]:
+            # Mismo patrón que AnimeFlix real: iframe por defecto ya en el HTML, más un
+            # <select> cuyas <option> llevan el iframe codificado en base64 en su value.
+            mirror_iframe = f'<iframe src="https://player.example/mirror1/{m[2]}"></iframe>'.encode()
+            b64 = base64.b64encode(mirror_iframe).decode()
+            return self._send(200, (
+                "<html><body>"
+                f'<div id="embed_holder"><iframe src="https://player.example/default/{m[2]}"></iframe></div>'
+                '<select class="mirror"><option value="">Select Video Server</option>'
+                f'<option value="{b64}">HD 1</option></select>'
+                "</body></html>"
+            ))
         self._send(404, "<html><body>No encontrado</body></html>")
 
     def log_message(self, *a):
