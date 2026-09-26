@@ -66,6 +66,12 @@ export function markUpTo(step, episode) {
   return mutate(step.provider, step.slug, x => { x.last = Math.max(x.last || 0, episode); });
 }
 
+// Lo contrario, para corregir un "visto" por error: retrocede `last` a justo antes de
+// `episode` (nunca lo sube — para eso está markUpTo).
+export function unmarkFrom(step, episode) {
+  return mutate(step.provider, step.slug, x => { x.last = Math.min(x.last || 0, episode - 1); });
+}
+
 // Marca visto el episodio que toca del paso actual (mismo `mutate` que usa el resto de
 // la app para "Visto +1" en list.js, así que actualiza el mismo `last` compartido).
 export async function markStepSeen(group, watchlist) {

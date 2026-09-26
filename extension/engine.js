@@ -68,6 +68,9 @@ export async function episodes(p, slug) {
   return out.sort((a, b) => a.number - b.number);
 }
 
+// URL de un episodio sin comprobar si existe (para "abrir" sin gastar una petición de red).
+export const episodeUrl = (p, slug, episode) => fill(p, p.episode.url, { slug, episode });
+
 export async function checkEpisode(p, slug, episode) {
   const e = p.episode;
   const url = fill(p, e.url, { slug, episode });

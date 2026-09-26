@@ -78,7 +78,7 @@ globalThis.chrome = { storage: { local: {
 } } };
 const { get } = await import("../extension/store.js");
 const { add } = await import("../extension/list.js");
-const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, live: liveGroups } =
+const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, unmarkFrom, live: liveGroups } =
   await import("../extension/groups.js");
 
 const g = await addGroup("Star Wars cronológico");
@@ -122,4 +122,12 @@ it2 = await markUpTo({ provider: "p", slug: "serie" }, 8);
 assert.equal(it2.last, 8);
 
 console.log("markUpTo OK");
+
+// unmarkFrom: retrocede last a justo antes del episodio dado, nunca lo sube
+it2 = await unmarkFrom({ provider: "p", slug: "serie" }, 5); // last=8 -> 4 (justo antes del 5)
+assert.equal(it2.last, 4);
+it2 = await unmarkFrom({ provider: "p", slug: "serie" }, 10); // "hacia delante": no debe subir el last
+assert.equal(it2.last, 4);
+
+console.log("unmarkFrom OK");
 console.log("TODO OK");
