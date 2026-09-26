@@ -59,12 +59,35 @@ export function moveStep(id, index, dir) {
   });
 }
 
+// Marca visto hasta `episode` (incluido) en el ítem de `step`. Monotónico: nunca mueve `last`
+// hacia atrás, por si el watchlist que tenía quien llama ya estaba obsoleto (otra pestaña o
+// dispositivo pudo avanzarlo entretanto).
+export function markUpTo(step, episode) {
+  return mutate(step.provider, step.slug, x => { x.last = Math.max(x.last || 0, episode); });
+}
+
 // Marca visto el episodio que toca del paso actual (mismo `mutate` que usa el resto de
 // la app para "Visto +1" en list.js, así que actualiza el mismo `last` compartido).
 export async function markStepSeen(group, watchlist) {
   const cur = currentStep(group, watchlist);
   if (!cur) return null;
-  // Monotónico: `cur.next` puede venir de un watchlist ya obsoleto (otra pestaña o dispositivo
-  // pudo avanzar el `last` entretanto), así que nunca lo movemos hacia atrás.
-  return mutate(cur.step.provider, cur.step.slug, x => { x.last = Math.max(x.last || 0, cur.next); });
+  return markUpTo(cur.step, cur.next);
+}
+
+// Aplana todos los pasos del grupo en episodios individuales, en el orden en que se ven —
+// para pintar el itinerario completo del grupo de un tirón (no solo "el que toca ahora").
+// Cada entrada lleva el número de episodio DENTRO de su propio título (no un número global
+// acumulado); `seen` marca si ya está visto según el `last` real del ítem.
+export function itinerary(group, watchlist) {
+  const out = [];
+  for (const step of group.steps || []) {
+    const item = watchlist.find(w => w.provider === step.provider && w.slug === step.slug);
+    const last = item?.last || 0;
+    const exclude = new Set(step.exclude || []);
+    for (let n = step.from; n <= step.to; n++) {
+      if (exclude.has(n)) continue;
+      out.push({ step, item, episode: n, seen: n <= last });
+    }
+  }
+  return out;
 }

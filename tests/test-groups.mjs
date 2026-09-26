@@ -1,6 +1,6 @@
 // node tests/test-groups.mjs — sin mocks, funciones puras.
 import assert from "node:assert/strict";
-import { nextNeeded, currentStep } from "../extension/groups.js";
+import { nextNeeded, currentStep, itinerary } from "../extension/groups.js";
 
 // nextNeeded: caso simple
 assert.equal(nextNeeded({ from: 1, to: 5, exclude: [] }, 0), 1);
@@ -48,6 +48,28 @@ assert.equal(cur2.next, 1);
 
 console.log("currentStep OK");
 
+// itinerary: aplana los pasos en episodios individuales, con su propio número por título
+// (no uno global acumulado), en el orden serie 1-5, película, serie 6-10 del enunciado real.
+const g2 = {
+  steps: [
+    { provider: "p", slug: "serie", from: 1, to: 5, exclude: [] },
+    { provider: "p", slug: "peli", from: 1, to: 1, exclude: [] },
+    { provider: "p", slug: "serie", from: 6, to: 10, exclude: [] }
+  ]
+};
+const wl4 = [{ provider: "p", slug: "serie", last: 6 }, { provider: "p", slug: "peli", last: 0 }];
+const it = itinerary(g2, wl4);
+assert.equal(it.length, 11); // 5 + 1 + 5, aplanado
+assert.deepEqual(it.map(e => e.episode), [1, 2, 3, 4, 5, 1, 6, 7, 8, 9, 10]);
+assert.equal(it[5].step.slug, "peli"); // posición 6 del itinerario = la película
+// "serie" comparte last=6 entre sus dos tramos: los 1-5 del primer tramo y el 6 del segundo
+// (que es el mismo episodio 6 real) quedan vistos; el resto del segundo tramo (7-10), no.
+assert.deepEqual(it.map(e => e.seen), [true, true, true, true, true, false, true, false, false, false, false]);
+// ítem del paso ausente del watchlist: no crashea, trata last como 0
+assert.equal(itinerary({ steps: [{ provider: "p", slug: "x", from: 1, to: 2, exclude: [] }] }, []).length, 2);
+
+console.log("itinerary OK");
+
 // --- CRUD (con chrome.storage.local falso, mismo patrón que test-sync-cron.mjs) ---
 const data = {};
 globalThis.chrome = { storage: { local: {
@@ -55,7 +77,8 @@ globalThis.chrome = { storage: { local: {
   set: async o => { Object.assign(data, structuredClone(o)); }
 } } };
 const { get } = await import("../extension/store.js");
-const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, live: liveGroups } =
+const { add } = await import("../extension/list.js");
+const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, live: liveGroups } =
   await import("../extension/groups.js");
 
 const g = await addGroup("Star Wars cronológico");
@@ -88,4 +111,15 @@ assert.equal(liveGroups(groups).length, 0); // borrado lógico, sigue en storage
 assert.equal(groups.length, 1);
 
 console.log("CRUD OK");
+
+// markUpTo: monótono, nunca retrocede last aunque se le pida un episodio anterior
+await add({ provider: "p", slug: "serie", title: "Serie", link: "x", image: null });
+let it2 = await markUpTo({ provider: "p", slug: "serie" }, 5);
+assert.equal(it2.last, 5);
+it2 = await markUpTo({ provider: "p", slug: "serie" }, 3); // "hacia atrás": no debe bajar el last
+assert.equal(it2.last, 5);
+it2 = await markUpTo({ provider: "p", slug: "serie" }, 8);
+assert.equal(it2.last, 8);
+
+console.log("markUpTo OK");
 console.log("TODO OK");
