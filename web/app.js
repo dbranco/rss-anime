@@ -276,8 +276,10 @@ function renderImportRows() {
 $("#importApplyBtn").onclick = () => {
   const p = $("#importProviderPick").value;
   if (!p) return;
-  importDraft.forEach((row, i) => { if ($("#imp" + i).checked) row.provider = p; });
+  let n = 0;
+  importDraft.forEach((row, i) => { if ($("#imp" + i).checked) { row.provider = p; n++; } });
   renderImportRows();
+  $("#groupMsg").textContent = n ? `Provider aplicado a ${n} título${n === 1 ? "" : "s"}.` : "Marca al menos un título primero.";
 };
 
 // Paso 3: buscar cada título en su provider y dejar elegir el resultado correcto.
