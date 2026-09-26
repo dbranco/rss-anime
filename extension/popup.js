@@ -2,7 +2,7 @@ import * as engine from "./engine.js";
 import { get, set } from "./store.js";
 import { live, add, mutate } from "./list.js";
 import * as groups from "./groups.js";
-import { getSession } from "./sync.js";
+import { getSession, searchPublicGroups, rateGroup } from "./sync.js";
 import { requestSync } from "./syncClient.js";
 
 const $ = s => document.querySelector(s);
@@ -20,7 +20,7 @@ const explain = e => e instanceof TypeError
   : e.message;
 
 let providers = [];
-// Copia de la lista tal y como la acaba de pintar renderList(). Existe para que
+// Copia de la lista tal y como la acaba de pintar renderMain(). Existe para que
 // ensurePermissions() pueda leerla SIN await: chrome.permissions.request() solo funciona si se
 // llama dentro de la pila de llamadas del clic, y cualquier await previo rompe ese gesto.
 let watchlistCache = [];
@@ -88,8 +88,7 @@ async function sync(quiet = true) {
     await requestSync();
     $("#cloud").textContent = "✓";
     await fillProviders();
-    renderList();
-    if (!$("#groupsView").hidden) renderGroups();
+    if (!$("#allView").hidden) renderMain();
     if (!quiet) msg("Sincronizado");
   } catch (e) {
     $("#cloud").textContent = "⚠";
@@ -103,20 +102,22 @@ async function init() {
   chrome.storage.onChanged.addListener((c, a) => { if (a === "local" && c.news) renderNews(); });
   await fillProviders();
   renderNews();
-  renderList();
+  renderMain();
   sync();
 }
 
 $("#tabAll").onclick = () => setView("all");
-$("#tabGroups").onclick = () => setView("groups");
+$("#tabExplore").onclick = () => setView("explore");
 
 function setView(v) {
   $("#allView").hidden = v !== "all";
-  $("#groupsView").hidden = v !== "groups";
+  $("#exploreView").hidden = v !== "explore";
   $("#tabAll").classList.toggle("active", v === "all");
-  $("#tabGroups").classList.toggle("active", v === "groups");
-  if (v === "groups") renderGroups();
+  $("#tabExplore").classList.toggle("active", v === "explore");
+  if (v === "all") renderMain();
 }
+
+$("#listFilter").addEventListener("change", () => { listFilter = document.querySelector('input[name="listf"]:checked').value; listPage = 0; renderMain(); });
 
 async function renderNews() {
   const news = await get("news", []);
@@ -144,7 +145,7 @@ $("#go").onclick = async () => {
     el("div", { className: "body" }, el("b", { textContent: r.title }),
       el("div", { className: "st", textContent: r._providerName }),
       el("div", { className: "actions" },
-        btn("＋ Guardar", async () => { await add(r); renderList(); msg("Guardada"); sync(); }),
+        btn("＋ Guardar", async () => { await add(r); renderMain(); msg("Guardada"); sync(); }),
         link(r.link, "Abrir"))))));
 };
 $("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
@@ -166,40 +167,35 @@ async function markSeen(item) {
     const news = await get("news", []);
     await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
   }
-  renderList();
+  renderMain();
   sync();
 }
 
-async function renderList() {
-  const list = live(await get("watchlist", []));
-  watchlistCache = list; // mantiene el caché fresco: init, cada mutación y cada sync pasan por aquí
-  $("#list").replaceChildren(...list.map(item => {
-    const st = el("div", { className: "st" });
-    const eps = el("div", { className: "eps" });
-    return el("div", { className: "card" },
-      item.image ? el("img", { src: safe(item.image) }) : "",
-      el("div", { className: "body" },
-        el("b", { textContent: item.title }),
-        el("div", { textContent: "Visto hasta el episodio " + (item.last || 0) }),
-        el("div", { className: "actions" },
-          btn("Siguiente", () => checkNext(item, st)),
-          btn("Episodios", async () => {
-            await ensurePermissions();
-            eps.textContent = "Cargando…";
-            try {
-              const l = await engine.episodes(prov(item.provider), item.slug);
-              eps.replaceChildren(...(l.length ? l.map(e => {
-                const a = link(e.link, String(e.number));
-                if (e.number <= (item.last || 0)) a.className = "seen";
-                return a;
-              }) : ["Sin episodios"]));
-            } catch (e) { eps.textContent = "Error: " + explain(e); }
-          }),
-          btn("Visto +1", () => markSeen(item)),
-          btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderList(); sync(); })),
-        st, eps));
-  }));
-  await updatePermBanner();
+function itemCard(item) {
+  const st = el("div", { className: "st" });
+  const eps = el("div", { className: "eps" });
+  return el("div", { className: "card" },
+    item.image ? el("img", { src: safe(item.image) }) : "",
+    el("div", { className: "body" },
+      el("b", { textContent: item.title }),
+      el("div", { textContent: "Visto hasta el episodio " + (item.last || 0) }),
+      el("div", { className: "actions" },
+        btn("Siguiente", () => checkNext(item, st)),
+        btn("Episodios", async () => {
+          await ensurePermissions();
+          eps.textContent = "Cargando…";
+          try {
+            const l = await engine.episodes(prov(item.provider), item.slug);
+            eps.replaceChildren(...(l.length ? l.map(e => {
+              const a = link(e.link, String(e.number));
+              if (e.number <= (item.last || 0)) a.className = "seen";
+              return a;
+            }) : ["Sin episodios"]));
+          } catch (e) { eps.textContent = "Error: " + explain(e); }
+        }),
+        btn("Visto +1", () => markSeen(item)),
+        btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderMain(); sync(); })),
+      st, eps));
 }
 
 const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169"];
@@ -287,7 +283,7 @@ function renderEpisodePanel(g, sel, onChange) {
               try { renderPlayerPicker(playerBox, await engine.episodePlayers(p, sel.step.slug, sel.episode)); }
               catch (e) { playerBox.textContent = "Error: " + explain(e); }
             }) : "",
-        btn("Cerrar", () => { itinSel.delete(g.id); renderGroups(); })),
+        btn("Cerrar", () => { itinSel.delete(g.id); renderMain(); })),
       playerBox));
 }
 
@@ -315,7 +311,7 @@ function renderItinerary(g, cur, watchlist, onChange) {
     // Un toque selecciona/abre la tarjeta de acción; toca otra vez para cerrarla.
     badge.onclick = () => {
       itinSel.set(g.id, isSel ? null : { step: e.step, episode: e.episode, item: e.item, seen: e.seen });
-      renderGroups();
+      renderMain();
     };
     return badge;
   });
@@ -324,69 +320,149 @@ function renderItinerary(g, cur, watchlist, onChange) {
     el("div", { className: "itin" }, ...badges),
     pages > 1
       ? el("div", { className: "row st" },
-          btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderGroups(); }),
+          btn("◀", () => { itinPage.set(g.id, Math.max(0, page - 1)); renderMain(); }),
           el("span", { textContent: `Página ${page + 1} de ${pages}` }),
-          btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderGroups(); }))
+          btn("▶", () => { itinPage.set(g.id, Math.min(pages - 1, page + 1)); renderMain(); }))
       : "",
     sel ? renderEpisodePanel(g, sel, onChange) : "");
 }
 
-async function renderGroups() {
-  const list = groups.live(await get("groups", []));
+const LIST_PAGE_SIZE = 10;
+let listFilter = "both";
+let listPage = 0;
+
+function groupCard(g, watchlist, owned) {
+  const cur = groups.currentStep(g, watchlist);
+  const st = el("div", { className: "st" });
+  const onMark = async (step, episode) => {
+    const it = await groups.markUpTo(step, episode);
+    if (it) {
+      const news = await get("news", []);
+      await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+    }
+    renderMain(); sync();
+  };
+  const body = !cur
+    ? el("div", { textContent: "✓ Terminado" })
+    : el("div", {},
+        el("div", { textContent:
+          `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
+          `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
+        cur.item
+          ? el("div", { className: "actions" },
+              btn("Siguiente", async () => {
+                const p = prov(cur.step.provider);
+                await ensurePermissions(cur.step.provider);
+                st.textContent = "Comprobando…";
+                try {
+                  const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
+                  st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
+                } catch (e) { st.textContent = "Error: " + explain(e); }
+              }),
+              btn("Visto", () => onMark(cur.step, cur.next)))
+          : el("div", { className: "st",
+              textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
+        st);
+  const missing = groups.missingSteps(g, watchlist);
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: g.name }),
+      owned ? "" : el("div", { className: "st", textContent: `de ${String(g.user_id || "").slice(0, 8)}…` }),
+      missing.length
+        ? el("div", { className: "st" },
+            `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
+            btn("Reparar", async () => { await groups.repairGroup(g, watchlist); renderMain(); sync(); }))
+        : "",
+      renderAvatars(g, cur, watchlist),
+      body,
+      renderItinerary(g, cur, watchlist, () => { renderMain(); sync(); }),
+      el("div", { className: "actions" },
+        owned
+          ? btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderMain(); sync(); })
+          : btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); renderMain(); sync(); }))));
+}
+
+async function renderMain() {
   const watchlist = live(await get("watchlist", []));
-  $("#groups").replaceChildren(...list.map(g => {
-    const cur = groups.currentStep(g, watchlist);
-    const st = el("div", { className: "st" });
-    const onMark = async (step, episode) => {
-      const it = await groups.markUpTo(step, episode);
-      if (it) {
-        const news = await get("news", []);
-        await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
-      }
-      renderGroups(); sync();
-    };
-    const body = !cur
-      ? el("div", { textContent: "✓ Terminado" })
-      : el("div", {},
-          el("div", { textContent:
-            `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
-            `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
-          cur.item
-            ? el("div", { className: "actions" },
-                btn("Siguiente", async () => {
-                  const p = prov(cur.step.provider);
-                  await ensurePermissions(cur.step.provider);
-                  st.textContent = "Comprobando…";
-                  try {
-                    const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
-                    st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
-                  } catch (e) { st.textContent = "Error: " + explain(e); }
-                }),
-                btn("Visto", () => onMark(cur.step, cur.next)))
-            : el("div", { className: "st",
-                textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
-          st);
-    const missing = groups.missingSteps(g, watchlist);
-    return el("div", { className: "card" },
-      el("div", { className: "body" },
-        el("b", { textContent: g.name }),
-        missing.length
-          ? el("div", { className: "st" },
-              `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
-              btn("Reparar", async () => { await groups.repairGroup(g, watchlist); renderGroups(); sync(); }))
-          : "",
-        renderAvatars(g, cur, watchlist),
-        body,
-        renderItinerary(g, cur, watchlist, () => { renderGroups(); sync(); }),
-        el("div", { className: "actions" },
-          btn("Borrar grupo", async () => { await groups.removeGroup(g.id); renderGroups(); sync(); }))));
-  }));
+  watchlistCache = watchlist; // mantiene el caché fresco: init, cada mutación y cada sync pasan por aquí
+  const myGroups = groups.live(await get("groups", []));
+  const subGroups = await get("subscribed_groups", []);
+  const entries = [];
+  if (listFilter !== "groups") entries.push(...watchlist.map(item => ({ kind: "item", data: item, ts: item.updated_at })));
+  if (listFilter !== "media") {
+    entries.push(...myGroups.map(g => ({ kind: "group", data: g, owned: true, ts: g.updated_at })));
+    entries.push(...subGroups.map(g => ({ kind: "group", data: g, owned: false, ts: g.updated_at })));
+  }
+  entries.sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+
+  const pages = Math.max(1, Math.ceil(entries.length / LIST_PAGE_SIZE));
+  listPage = Math.min(listPage, pages - 1);
+  const start = listPage * LIST_PAGE_SIZE;
+  const page = entries.slice(start, start + LIST_PAGE_SIZE);
+
+  $("#list").replaceChildren(...(page.length
+    ? page.map(e => (e.kind === "item" ? itemCard(e.data) : groupCard(e.data, watchlist, e.owned)))
+    : ["Nada que mostrar con este filtro."]));
+  $("#listPager").replaceChildren(
+    btn("◀", () => { listPage = Math.max(0, listPage - 1); renderMain(); }),
+    el("span", { textContent: `Página ${listPage + 1} de ${pages}` }),
+    btn("▶", () => { listPage = Math.min(pages - 1, listPage + 1); renderMain(); }));
+  await updatePermBanner();
+}
+
+const EXPLORE_PAGE_SIZE = 10;
+let exploreResults = [];
+let explorePage = 0;
+
+$("#exploreBtn").onclick = async () => {
+  const q = $("#exploreQ").value.trim();
+  $("#exploreResults").replaceChildren("Buscando…");
+  try {
+    exploreResults = await searchPublicGroups(q);
+    explorePage = 0;
+    renderExplore();
+  } catch (e) { $("#exploreResults").replaceChildren("Error: " + explain(e)); }
+};
+
+function exploreCard(g) {
+  const st = el("div", { className: "st" });
+  const stars = el("select", {});
+  stars.replaceChildren(...[1, 2, 3, 4, 5].map(n => el("option", { value: n, textContent: `${n} ★` })));
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: g.name }),
+      el("div", { className: "st", textContent:
+        g.rating_count ? `${g.rating_avg.toFixed(1)} ★ (${g.rating_count})` : "Sin valoraciones" }),
+      el("div", { className: "actions" },
+        btn("Suscribirme", async () => {
+          await groups.subscribe(g, live(await get("watchlist", [])));
+          st.textContent = "Suscrito.";
+          sync();
+        }),
+        stars,
+        btn("Valorar", async () => {
+          try { await rateGroup(g.user_id, g.id, +stars.value); st.textContent = "Gracias por valorar."; }
+          catch (e) { st.textContent = "Error: " + explain(e); }
+        })),
+      st));
+}
+
+function renderExplore() {
+  const pages = Math.max(1, Math.ceil(exploreResults.length / EXPLORE_PAGE_SIZE));
+  explorePage = Math.min(explorePage, pages - 1);
+  const start = explorePage * EXPLORE_PAGE_SIZE;
+  const page = exploreResults.slice(start, start + EXPLORE_PAGE_SIZE);
+  $("#exploreResults").replaceChildren(...(page.length ? page.map(exploreCard) : ["Sin resultados"]));
+  $("#explorePager").replaceChildren(
+    btn("◀", () => { explorePage = Math.max(0, explorePage - 1); renderExplore(); }),
+    el("span", { textContent: `Página ${explorePage + 1} de ${pages}` }),
+    btn("▶", () => { explorePage = Math.min(pages - 1, explorePage + 1); renderExplore(); }));
 }
 
 $("#all").onclick = async () => {
   await ensurePermissions();
   msg("Sincronizando y comprobando en segundo plano…");
-  try { await chrome.runtime.sendMessage({ type: "checkNow" }); await fillProviders(); renderList(); msg("Listo"); }
+  try { await chrome.runtime.sendMessage({ type: "checkNow" }); await fillProviders(); renderMain(); msg("Listo"); }
   catch (e) { msg("Error: " + e.message); }
 };
 
@@ -395,6 +471,7 @@ let draftSteps = [];
 $("#newGroup").onclick = async () => {
   draftSteps = [];
   $("#groupName").value = "";
+  $("#groupPublic").checked = false;
   $("#stepFrom").value = "1";
   $("#stepTo").value = "1";
   $("#stepExclude").value = "";
@@ -529,8 +606,9 @@ $("#saveGroupBtn").onclick = async () => {
   if (!draftSteps.length) { msg("Añade al menos un paso: usa ＋ Añadir paso, o Buscar + elegir resultado si vienes del JSON"); return; }
   const g = await groups.addGroup(name);
   for (const s of draftSteps) await groups.addStep(g.id, s);
+  if ($("#groupPublic").checked) await groups.setPublic(g.id, true);
   $("#groupForm").hidden = true;
-  renderGroups();
+  renderMain();
   sync();
 };
 

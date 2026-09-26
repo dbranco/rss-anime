@@ -55,26 +55,30 @@
 
 <div id="newsBox" hidden><h2>Nuevos episodios</h2><div id="news"></div></div>
 
-<h2>Buscar</h2>
-<div id="langFilter"></div>
-<div class="row" style="margin-top:6px"><input id="q" placeholder="Re:Zero"><button id="go">Buscar</button></div>
-<div id="results"></div>
-
 <div class="tabs">
-  <button id="tabAll" class="tab active">Todo</button>
-  <button id="tabGroups" class="tab">Grupos</button>
+  <button id="tabAll" class="tab active">Mi lista</button>
+  <button id="tabExplore" class="tab">Explorar</button>
 </div>
 
 <div id="allView">
-  <h2>Mi lista <button id="all">Comprobar todos</button></h2>
-  <div id="list"></div>
-</div>
+  <h2>Buscar</h2>
+  <div id="langFilter"></div>
+  <div class="row" style="margin-top:6px"><input id="q" placeholder="Re:Zero"><button id="go">Buscar</button></div>
+  <div id="results"></div>
 
-<div id="groupsView" hidden>
-  <div id="groups"></div>
+  <h2>Mi lista <button id="all">Comprobar todos</button></h2>
+  <div class="row" id="listFilter">
+    <label><input type="radio" name="listf" value="media"> Media</label>
+    <label><input type="radio" name="listf" value="groups"> Listas</label>
+    <label><input type="radio" name="listf" value="both" checked> Ambos</label>
+  </div>
+  <div id="list"></div>
+  <div class="row st" id="listPager"></div>
+
   <button id="newGroup">＋ Nuevo grupo</button>
   <div id="groupForm" hidden>
     <input id="groupName" placeholder="Nombre del grupo" style="margin:6px 0">
+    <label class="st"><input type="checkbox" id="groupPublic"> Pública (cualquiera con cuenta puede verla y suscribirse)</label>
 
     <details id="importBox">
       <summary>Pegar JSON (importar desde una IA)</summary>
@@ -116,6 +120,13 @@
       <button id="cancelGroupBtn">Cancelar</button>
     </div>
   </div>
+</div>
+
+<div id="exploreView" hidden>
+  <h2>Explorar listas públicas</h2>
+  <div class="row"><input id="exploreQ" placeholder="Buscar por nombre"><button id="exploreBtn">Buscar</button></div>
+  <div id="exploreResults"></div>
+  <div class="row st" id="explorePager"></div>
 </div>
 
 <p id="msg"></p>
