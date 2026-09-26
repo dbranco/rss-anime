@@ -104,8 +104,13 @@ class H(BaseHTTPRequestHandler):
             if not kind:
                 return self.send(401, {"message": "no auth"})
             rows = list(TABLES.get(m[1], []))
-            if kind == "user" and m[1] != "app_config":  # simula RLS (app_config: lectura abierta)
-                rows = [r for r in rows if r.get("user_id") == uid]
+            if kind == "user":
+                if m[1] in ("app_config", "group_ratings"):
+                    pass  # lectura abierta a cualquier autenticado
+                elif m[1] == "groups":
+                    rows = [r for r in rows if r.get("user_id") == uid or r.get("public")]
+                else:
+                    rows = [r for r in rows if r.get("user_id") == uid]
             q = parse_qs(u.query)
             for col, vals in q.items():
                 if col in ("select", "order", "limit"):

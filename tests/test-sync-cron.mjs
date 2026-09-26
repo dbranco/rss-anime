@@ -16,7 +16,7 @@ const A = machine(), B = machine();
 const use = m => { globalThis.chrome = m; };
 
 const { get, set } = await import("../extension/store.js");
-const { signUp, signIn, syncNow, saveAppProviders } = await import("../extension/sync.js");
+const { signUp, signIn, syncNow, saveAppProviders, searchPublicGroups, rateGroup } = await import("../extension/sync.js");
 const { add, mutate, live } = await import("../extension/list.js");
 const providers = JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8"));
 
@@ -156,5 +156,46 @@ const cXml = await (await fetch(cFeedUrl)).text();
 assert.match(cXml, /Dandadan — episodio 1/);
 assert.equal(count(cXml), 3, "los 3 episodios del mock para la lista de C");
 console.log("C (no admin) también recibe episodios nuevos vía los providers compartidos");
+
+// A hace público uno de sus grupos; C lo encuentra en Explorar, se suscribe (se repara
+// sola su lista), marca progreso propio SIN tocar el de A, lo valora, y el cron le
+// resuelve episodios nuevos de ese grupo suscrito en SU PROPIO feed.
+use(A);
+const { setPublic } = await import("../extension/groups.js");
+await setPublic(gLong.id, true); // "Maratón larga" (longrun, del bloque anterior)
+await syncNow();
+
+use(C);
+await syncNow();
+const found2 = await searchPublicGroups("Maratón");
+assert.equal(found2.length, 1);
+assert.equal(found2[0].name, "Maratón larga");
+
+const { subscribe, currentStep: curStepC, markUpTo } = await import("../extension/groups.js");
+await subscribe(found2[0], live(await get("watchlist", [])));
+assert.ok(live(await get("watchlist", [])).find(w => w.provider === "mock" && w.slug === "longrun"),
+  "suscribirse repara sola la lista de C para el paso de 'longrun'");
+await syncNow();
+
+const cSub = (await get("subscribed_groups", [])).find(g => g.name === "Maratón larga");
+assert.ok(cSub, "C ve el grupo suscrito en su caché de solo lectura");
+const curC = curStepC(cSub, live(await get("watchlist", [])));
+assert.equal(curC.next, 20); // mismo paso "longrun 20-20" que definió A
+await markUpTo(curC.step, 20);
+assert.equal(live(await get("watchlist", [])).find(w => w.slug === "longrun").last, 20,
+  "el progreso de C en 'longrun' es suyo, independiente del de A");
+await syncNow();
+
+use(A);
+await syncNow();
+assert.equal(live(await get("watchlist", [])).find(w => w.slug === "longrun")?.last ?? 0, 0,
+  "A nunca marcó 'longrun' como visto — el progreso propio de C en su suscripción no le pisa nada");
+
+use(C);
+await rateGroup(found2[0].user_id, found2[0].id, 5);
+const rated = await searchPublicGroups("Maratón");
+assert.equal(rated[0].rating_avg, 5);
+assert.equal(rated[0].rating_count, 1);
+console.log("grupo público: descubrir, suscribirse (con auto-reparación), progreso propio y valorar OK");
 
 console.log("TODO OK");

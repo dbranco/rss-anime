@@ -161,7 +161,7 @@ async function syncWatchlist(uid) {
 
 async function syncGroups(uid) {
   const remote = (await rest(`groups?select=*&user_id=eq.${uid}`)).map(r => ({
-    id: r.id, name: r.name, steps: r.steps, deleted: r.deleted, updated_at: r.updated_at
+    id: r.id, name: r.name, steps: r.steps, public: !!r.public, deleted: r.deleted, updated_at: r.updated_at
   }));
   const local = await get("groups", []);
   const snapshot = JSON.stringify(local);
@@ -177,11 +177,84 @@ async function syncGroups(uid) {
     await rest("groups?on_conflict=user_id,id", {
       method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
       body: toPush.map(x => ({
-        user_id: uid, id: x.id, name: x.name, steps: x.steps, deleted: !!x.deleted, updated_at: x.updated_at
+        user_id: uid, id: x.id, name: x.name, steps: x.steps, public: !!x.public,
+        deleted: !!x.deleted, updated_at: x.updated_at
       }))
     });
   }
   if (JSON.stringify(await get("groups", [])) === snapshot) await set("groups", [...merged.values()]);
+}
+
+async function syncSubscriptions(uid) {
+  const remote = (await rest(`group_subscriptions?select=*&user_id=eq.${uid}`)).map(r => ({
+    owner_id: r.owner_id, group_id: r.group_id, deleted: r.deleted, updated_at: r.updated_at
+  }));
+  const local = await get("group_subscriptions", []);
+  const snapshot = JSON.stringify(local);
+  const key = x => `${x.owner_id}|${x.group_id}`;
+  const merged = new Map(remote.map(x => [key(x), x]));
+  const toPush = [];
+  for (const l of local) {
+    if (!l.updated_at) l.updated_at = now();
+    const r = merged.get(key(l));
+    if (!r || ts(l.updated_at) > ts(r.updated_at)) { merged.set(key(l), l); toPush.push(l); }
+  }
+  if (toPush.length) {
+    await rest("group_subscriptions?on_conflict=user_id,owner_id,group_id", {
+      method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+      body: toPush.map(x => ({
+        user_id: uid, owner_id: x.owner_id, group_id: x.group_id,
+        deleted: !!x.deleted, updated_at: x.updated_at
+      }))
+    });
+  }
+  if (JSON.stringify(await get("group_subscriptions", [])) === snapshot) await set("group_subscriptions", [...merged.values()]);
+}
+
+// Trae, en modo solo lectura, el grupo original de cada suscripción viva. No se sube nunca
+// (la propiedad y edición son siempre del dueño); se sobrescribe entera en cada sync. Si el
+// grupo se volvió privado o se borró, simplemente deja de traerlo (la RLS ya no lo permite).
+async function refreshSubscribedGroups() {
+  const subs = (await get("group_subscriptions", [])).filter(s => !s.deleted);
+  const out = [];
+  for (const s of subs) {
+    const [g] = await rest(`groups?select=*&user_id=eq.${s.owner_id}&id=eq.${s.group_id}`);
+    if (g) out.push(g);
+  }
+  await set("subscribed_groups", out);
+}
+
+// Trae TODOS los grupos públicos que matcheen el nombre (sin paginar en SQL — a esta escala
+// no hace falta) y les calcula la media de estrellas en el cliente para poder ordenar por
+// ella; la paginación de 10 en 10 la hace la UI troceando este array ya ordenado.
+export async function searchPublicGroups(query) {
+  const q = encodeURIComponent(`*${query}*`);
+  const found = await rest(`groups?select=*&public=eq.true&name=ilike.${q}`);
+  if (!found.length) return [];
+  const owners = [...new Set(found.map(g => g.user_id))].join(",");
+  const ids = [...new Set(found.map(g => g.id))].join(",");
+  const ratings = await rest(`group_ratings?select=owner_id,group_id,stars&owner_id=in.(${owners})&group_id=in.(${ids})`);
+  const avg = new Map();
+  for (const r of ratings) {
+    const k = `${r.owner_id}|${r.group_id}`;
+    const cur = avg.get(k) || { sum: 0, n: 0 };
+    cur.sum += r.stars; cur.n += 1;
+    avg.set(k, cur);
+  }
+  return found
+    .map(g => {
+      const a = avg.get(`${g.user_id}|${g.id}`);
+      return { ...g, rating_avg: a ? a.sum / a.n : null, rating_count: a?.n || 0 };
+    })
+    .sort((a, b) => (b.rating_avg || 0) - (a.rating_avg || 0));
+}
+
+export async function rateGroup(ownerId, groupId, stars) {
+  const s = await session();
+  await rest("group_ratings?on_conflict=user_id,owner_id,group_id", {
+    method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+    body: [{ user_id: s.user.id, owner_id: ownerId, group_id: groupId, stars, updated_at: now() }]
+  });
 }
 
 export async function syncNow() {
@@ -190,5 +263,7 @@ export async function syncNow() {
   await syncAppConfig(s.user.id);
   await syncWatchlist(s.user.id);
   await syncGroups(s.user.id);
+  await syncSubscriptions(s.user.id);
+  await refreshSubscribedGroups();
   await set("last_sync", now());
 }

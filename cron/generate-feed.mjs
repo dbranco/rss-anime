@@ -60,6 +60,28 @@ async function publish(token, xml) {
   console.log(process.env.SHOW_URL === "1" ? `Feed: ${url}` : `Feed publicado (…${token.slice(-4)})`);
 }
 
+// Comparte la lógica de "¿hay episodio nuevo en el paso actual de este grupo?" entre los
+// grupos propios de un usuario y los que sigue por suscripción — el episodio encontrado
+// siempre va al feed del usuario que lo está revisando (`uid`), nunca al del dueño del grupo.
+async function checkGroupEpisode(g, mineForGroups, uid, known, fresh) {
+  const cur = currentStep(g, mineForGroups);
+  if (!cur?.next) return;
+  if (!cur.item) return; // paso colgando: el ítem ya no está en la lista de este usuario
+  const p = providers.find(x => x.id === cur.step.provider);
+  if (!p) return;
+  const already = known.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next)
+    || fresh.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next);
+  if (already) return;
+  let r;
+  try { r = await engine.checkEpisode(p, cur.step.slug, cur.next); }
+  catch (e) { console.warn(`Fallo en grupo ${g.name}: ${e.message}`); return; }
+  if (!r.exists) return;
+  const title = cur.item?.title || cur.step.slug;
+  fresh.push({ user_id: uid, provider_id: cur.step.provider, slug: cur.step.slug, episode: cur.next,
+               title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
+  console.log(`Nuevo (grupo ${g.name}): ${title} ep ${cur.next}`);
+}
+
 const [appConfig] = await rest("app_config?select=providers&id=eq.1");
 const providers = appConfig?.providers || [];
 if (!providers.length) console.warn("app_config vacío: ningún provider configurado todavía");
@@ -67,6 +89,7 @@ const settings = await rest("user_settings?select=user_id,feed_token");
 const watch = await rest("watchlist?select=*&deleted=eq.false");
 const found = await rest("episodes_found?select=*&order=found_at.desc");
 const groups = await rest("groups?select=*&deleted=eq.false");
+const subs = await rest("group_subscriptions?select=*&deleted=eq.false");
 
 for (const st of settings) {
   try {
@@ -92,25 +115,12 @@ for (const st of settings) {
 
     const mineForGroups = mine.map(w => ({ provider: w.provider_id, slug: w.slug, last: w.last, title: w.title }));
     const myGroups = groups.filter(g => g.user_id === st.user_id);
-    for (const g of myGroups) {
-      const cur = currentStep(g, mineForGroups);
-      if (!cur?.next) continue;
-      if (!cur.item) continue; // paso colgando: el ítem ya no está en la lista
-      const p = providers.find(x => x.id === cur.step.provider);
-      if (!p) continue;
-      // Dedupe contra pasadas anteriores (`known`) y contra lo que el bucle por ítem ya ha
-      // encolado en esta misma pasada (`fresh`): comparten clave primaria y guid del RSS.
-      const already = known.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next)
-        || fresh.some(f => f.provider_id === cur.step.provider && f.slug === cur.step.slug && f.episode === cur.next);
-      if (already) continue;
-      let r;
-      try { r = await engine.checkEpisode(p, cur.step.slug, cur.next); }
-      catch (e) { console.warn(`Fallo en grupo ${g.name}: ${e.message}`); continue; }
-      if (!r.exists) continue;
-      const title = cur.item?.title || cur.step.slug;
-      fresh.push({ user_id: st.user_id, provider_id: cur.step.provider, slug: cur.step.slug, episode: cur.next,
-                   title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
-      console.log(`Nuevo (grupo ${g.name}): ${title} ep ${cur.next}`);
+    const mySubs = subs.filter(s => s.user_id === st.user_id);
+    const subscribedGroups = mySubs
+      .map(s => groups.find(g => g.user_id === s.owner_id && g.id === s.group_id))
+      .filter(Boolean);
+    for (const g of [...myGroups, ...subscribedGroups]) {
+      await checkGroupEpisode(g, mineForGroups, st.user_id, known, fresh);
     }
 
     if (fresh.length) {
