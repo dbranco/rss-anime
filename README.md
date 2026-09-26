@@ -58,6 +58,14 @@ sale del mismo "visto hasta" de cada ítem, no hay contador aparte. Se sincroniz
 tanto las notificaciones como el feed RSS avisan del episodio que el grupo necesita a continuación. En
 esta versión los grupos se crean y se borran; para cambiar uno, bórralo y créalo de nuevo.
 
+Un grupo puede hacerse público al crearlo ("Pública"): cualquier cuenta lo encuentra
+en la pestaña **Explorar**, se suscribe (sin copiarlo — sigue el original en vivo) y
+lo valora con estrellas. Suscribirte repara sola tu lista para poder marcar progreso
+desde el primer momento; tu progreso es tuyo, separado del de cualquier otro
+suscriptor. Solo el dueño puede editar o borrar un grupo; el resto solo puede darse de
+baja. Ver `docs/superpowers/specs/2026-09-26-public-groups-design.md` para el detalle
+completo.
+
 ## 3. Cron / RSS
 Necesita Node 20+ (`npm install`).
 - **Local (recomendado si la web bloquea IPs de datacenter):** copia `.env.example` a `.env`, rellénalo y
