@@ -147,6 +147,27 @@ const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169
 const ITIN_PAGE_SIZE = 25;
 const itinPage = new Map(); // id de grupo -> página actual del itinerario
 
+// Convierte un slug en un título legible (rezero-kara-... -> "Rezero Kara ...") para el ítem
+// que crea "Reparar" — no es tan bonito como el título real, pero sirve para identificarlo
+// y, sobre todo, ya existe en la lista y el grupo puede empezar a trackear su progreso.
+const prettify = slug => slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+function missingSteps(g, watchlist) {
+  const seen = new Set();
+  return g.steps.filter(s => {
+    const key = `${s.provider}|${s.slug}`;
+    if (seen.has(key)) return false; // no repetir el mismo ítem si aparece en varios pasos
+    seen.add(key);
+    return !watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
+  });
+}
+
+async function repairGroup(g, watchlist) {
+  for (const s of missingSteps(g, watchlist)) {
+    await add({ provider: s.provider, slug: s.slug, title: prettify(s.slug), link: null, image: null });
+  }
+}
+
 function titleColors(steps) {
   const map = new Map();
   for (const s of steps) {
@@ -268,9 +289,15 @@ async function renderGroups() {
             : el("div", { className: "st",
                 textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
           st);
+    const missing = missingSteps(g, watchlist);
     return el("div", { className: "card" },
       el("div", { className: "body" },
         el("b", { textContent: g.name }),
+        missing.length
+          ? el("div", { className: "st" },
+              `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
+              btn("Reparar", async () => { await repairGroup(g, watchlist); renderGroups(); sync(); }))
+          : "",
         renderAvatars(g, cur, watchlist),
         body,
         renderItinerary(g, cur, watchlist, () => { renderGroups(); sync(); }),
