@@ -376,7 +376,8 @@ $("#importSearchBtn").onclick = async () => {
     try {
       const res = await engine.search(prov(row.provider), row.title);
       list.replaceChildren(...(res.length
-        ? res.map(r => btn(r.title, () => {
+        ? res.map(r => btn(r.title, async () => {
+            await add(r); // sin esto el paso apuntaría a un ítem que no existe en tu lista
             draftSteps.push({ provider: row.provider, slug: r.slug, from: row.from, to: row.to, exclude: row.exclude });
             renderDraftSteps();
             box.remove();
