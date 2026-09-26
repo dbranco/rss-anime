@@ -1,5 +1,5 @@
 import { get, set } from "./store.js";
-import { signIn, signUp, signOut, getSession } from "./sync.js";
+import { signIn, signUp, signOut, getSession, saveAppProviders } from "./sync.js";
 import { requestSync } from "./syncClient.js";
 
 const $ = s => document.querySelector(s);
@@ -9,6 +9,9 @@ const sbMsg = (t, bad) => { const s = $("#sbStatus"); s.textContent = t; s.style
 async function loadProviders() {
   $("#json").value = JSON.stringify(await get("providers", []), null, 2);
   $("#interval").value = await get("interval", 60);
+  const admin = await get("is_admin", false);
+  $("#providersSection").hidden = !admin;
+  $("#providersReadonly").hidden = admin;
 }
 
 async function renderSb() {
@@ -47,12 +50,16 @@ $("#save").onclick = () => {
   // Debe llamarse directamente desde el clic (gesto del usuario)
   const origins = [...new Set(arr.map(p => { const u = new URL(p.base_url); return `${u.protocol}//${u.hostname}/*`; }))];
   chrome.permissions.request({ origins }).then(async granted => {
-    await set("providers", arr);
-    await set("providers_updated_at", new Date().toISOString());
-    await set("interval", Math.max(10, +$("#interval").value || 60));
+    try { await saveAppProviders(arr); }
+    catch (e) { return status("Error al guardar: " + e.message, true); }
     status(granted ? "Guardado y permisos concedidos." : "Guardado, pero SIN permiso a los dominios: las búsquedas fallarán.", !granted);
-    try { if (await getSession()) { await requestSync(); renderSb(); } } catch (e) { status("Guardado, pero la sync falló: " + e.message, true); }
+    await loadProviders();
   });
+};
+
+$("#saveInterval").onclick = async () => {
+  await set("interval", Math.max(10, +$("#interval").value || 60));
+  $("#intervalStatus").textContent = "Guardado.";
 };
 
 // Pide permiso para el dominio de Supabase; debe ser lo primero que ocurre en el clic.
