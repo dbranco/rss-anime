@@ -45,6 +45,11 @@
 <body>
 <h1>Series Tracker <span><span id="cloud"></span> <button id="sync" title="Sincronizar con Supabase">☁</button> <button id="opts" title="Opciones">⚙</button></span></h1>
 
+<div id="permBanner" hidden>
+  <p class="st">Faltan permisos para comprobar tu lista en segundo plano.</p>
+  <button id="grantPerms">Conceder permisos</button>
+</div>
+
 <div id="newsBox" hidden><h2>Nuevos episodios</h2><div id="news"></div></div>
 
 <h2>Buscar</h2>

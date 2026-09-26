@@ -44,7 +44,9 @@ export async function signUp(email, password) {
   return { confirmed: false }; // Supabase pide confirmar el email antes de iniciar sesión
 }
 
-export const signOut = () => set("session", null);
+// Al cerrar sesión se limpia también is_admin: si no, el flag del admin sobrevive hasta la
+// siguiente sync y la UI seguiría ofreciendo editar providers a quien ya no es nadie.
+export const signOut = () => Promise.all([set("session", null), set("is_admin", false)]).then(() => {});
 export const getSession = () => get("session", null);
 
 async function session() {
@@ -94,8 +96,12 @@ async function syncFeedToken(uid) {
 // solo el admin (fila en `admins`) puede escribir con saveAppProviders().
 async function syncAppConfig(uid) {
   const [row] = await rest("app_config?select=providers,updated_at&id=eq.1");
-  await set("providers", row?.providers || []);
-  await set("providers_updated_at", row?.updated_at || null);
+  // Sin fila remota no pisamos nada: en una instalación nueva lo que hay en local es la
+  // semilla de providers.example.json (o el borrador del admin antes de guardar).
+  if (row) {
+    await set("providers", row.providers || []);
+    await set("providers_updated_at", row.updated_at || null);
+  }
   const adminRows = await rest(`admins?select=user_id&user_id=eq.${uid}`);
   await set("is_admin", adminRows.length > 0);
 }

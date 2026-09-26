@@ -20,27 +20,50 @@ const explain = e => e instanceof TypeError
   : e.message;
 
 let providers = [];
+// Copia de la lista tal y como la acaba de pintar renderList(). Existe para que
+// ensurePermissions() pueda leerla SIN await: chrome.permissions.request() solo funciona si se
+// llama dentro de la pila de llamadas del clic, y cualquier await previo rompe ese gesto.
+let watchlistCache = [];
 const prov = id => providers.find(p => p.id === id);
 function domainOrigin(p) { const u = new URL(p.base_url); return `${u.protocol}//${u.hostname}/*`; }
 
-// Pide permiso de Chrome para los dominios de los providers en uso, en el mismo gesto de clic
-// que ya está en curso. Nadie más lo pide: el admin lo hace en Opciones al guardar, y a un
-// usuario normal no le queda otro sitio donde hacerlo. Si ya estaba concedido no muestra nada.
-async function ensurePermissions(extraId) {
-  const list = live(await get("watchlist", []));
-  const ids = new Set(list.map(w => w.provider));
+function watchlistOrigins(extraId) {
+  const ids = new Set(watchlistCache.map(w => w.provider));
   if (extraId) ids.add(extraId);
-  const origins = [...new Set([...ids].map(id => prov(id)).filter(Boolean).map(domainOrigin))];
-  if (!origins.length) return;
-  try { await chrome.permissions.request({ origins }); } catch { /* el fetch fallará y explain() lo explica */ }
+  return [...new Set([...ids].map(id => prov(id)).filter(Boolean).map(domainOrigin))];
 }
+
+// Pide permiso de Chrome para los dominios de los providers en uso, en el mismo gesto de clic
+// que ya está en curso. OJO: nada de await antes de chrome.permissions.request() — por eso la
+// función no es async y usa watchlistCache. Si ya estaba concedido no muestra nada.
+function ensurePermissions(extraId) {
+  const origins = watchlistOrigins(extraId);
+  if (!origins.length) return Promise.resolve();
+  return chrome.permissions.request({ origins }).catch(e => {
+    msg("No se pudo pedir el permiso: " + e.message);
+  });
+}
+
+// El aviso de permisos es el único sitio donde un usuario normal puede concederlos de golpe:
+// sin ellos, el chequeo periódico por chrome.alarms (que nunca tiene gesto de usuario) no
+// puede hacer fetch a los dominios de los providers. contains() no necesita gesto.
+async function updatePermBanner() {
+  const origins = watchlistOrigins();
+  const ok = !origins.length || await chrome.permissions.contains({ origins });
+  $("#permBanner").hidden = ok;
+}
+
+$("#grantPerms").onclick = async () => {
+  await ensurePermissions();
+  updatePermBanner();
+};
 
 async function fillProviders() {
   providers = await get("providers", []);
   const cur = $("#prov").value;
   $("#prov").replaceChildren(...providers.map(p => el("option", { value: p.id, textContent: p.name || p.id })));
   if (cur) $("#prov").value = cur;
-  if (!providers.length) msg("Añade un provider en Opciones (⚙).");
+  if (!providers.length) msg("El admin de la app aún no ha configurado ningún provider.");
 }
 
 // Sincroniza si hay sesión; en modo silencioso no molesta con errores.
@@ -131,6 +154,7 @@ async function markSeen(item) {
 
 async function renderList() {
   const list = live(await get("watchlist", []));
+  watchlistCache = list; // mantiene el caché fresco: init, cada mutación y cada sync pasan por aquí
   $("#list").replaceChildren(...list.map(item => {
     const st = el("div", { className: "st" });
     const eps = el("div", { className: "eps" });
@@ -157,6 +181,7 @@ async function renderList() {
           btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderList(); sync(); })),
         st, eps));
   }));
+  await updatePermBanner();
 }
 
 const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169"];

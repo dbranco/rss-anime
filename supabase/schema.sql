@@ -2,7 +2,7 @@
 -- Ruta sin CLI (para quien no quiera instalar la Supabase CLI). Si usas la CLI, aplica
 -- supabase/migrations/ en su lugar (supabase db push) — mantén ambos en sync a mano.
 
--- Un registro por usuario: sus providers (JSON) y el token secreto de su feed RSS.
+-- Un registro por usuario: su token secreto de feed RSS (la columna providers ya no se usa, ver app_config).
 create table if not exists public.user_settings (
   user_id    uuid primary key default auth.uid() references auth.users(id) on delete cascade,
   providers  jsonb not null default '[]'::jsonb,
@@ -106,6 +106,8 @@ create policy "admin update app config" on public.app_config
   using (exists (select 1 from public.admins a where a.user_id = auth.uid()))
   with check (exists (select 1 from public.admins a where a.user_id = auth.uid()));
 
+-- Esta política es una dependencia real de las políticas de escritura de app_config: su
+-- EXISTS se evalúa como el usuario que llama, así que necesita poder leer su propia fila aquí.
 drop policy if exists "read own admin flag" on public.admins;
 create policy "read own admin flag" on public.admins
   for select to authenticated using (auth.uid() = user_id);

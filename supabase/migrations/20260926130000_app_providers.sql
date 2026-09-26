@@ -29,6 +29,8 @@ create policy "admin update app config" on public.app_config
   using (exists (select 1 from public.admins a where a.user_id = auth.uid()))
   with check (exists (select 1 from public.admins a where a.user_id = auth.uid()));
 
+-- Esta política es una dependencia real de las políticas de escritura de app_config: su
+-- EXISTS se evalúa como el usuario que llama, así que necesita poder leer su propia fila aquí.
 drop policy if exists "read own admin flag" on public.admins;
 create policy "read own admin flag" on public.admins
   for select to authenticated using (auth.uid() = user_id);

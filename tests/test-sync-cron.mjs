@@ -139,7 +139,22 @@ assert.equal((await signUp("otra@test.dev", "secreto123")).confirmed, true);
 await syncNow();
 assert.equal((await get("providers", [])).length, 1);
 assert.equal(await get("is_admin", false), false);
+// OJO: este mensaje lo inventa tests/mock_supabase.py, no es el que devuelve PostgREST real.
+// Esto prueba la lógica del mock (y que el cliente propaga el error), no el RLS de Postgres.
 await assert.rejects(() => saveAppProviders([{ id: "hack" }]), /solo admin/);
 console.log("C (no admin) recibió providers en solo lectura y no pudo escribir");
+
+// C también puede USAR los providers compartidos aunque no pueda escribirlos: añade una serie
+// a su propia lista y comprueba que el cron (que ahora lee app_config una sola vez, no por
+// usuario) también le resuelve episodios nuevos a ella. C nunca escribió providers en su
+// user_settings, así que un cron que volviera a leerlos por usuario le daría un feed vacío.
+await add({ provider: "mock", slug: "dandadan", title: "Dandadan", link: "http://127.0.0.1:8001/blabla/dandadan", image: null });
+await syncNow();
+run();
+const cFeedUrl = `${SB}/storage/v1/object/public/feeds/${await get("feed_token")}.xml`;
+const cXml = await (await fetch(cFeedUrl)).text();
+assert.match(cXml, /Dandadan — episodio 1/);
+assert.equal(count(cXml), 3, "los 3 episodios del mock para la lista de C");
+console.log("C (no admin) también recibe episodios nuevos vía los providers compartidos");
 
 console.log("TODO OK");

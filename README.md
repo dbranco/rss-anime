@@ -46,6 +46,11 @@ insert into admins (user_id) select id from auth.users where email = 'tu@email.c
 Luego, en Opciones (extensión) o Config (PWA), pega el JSON de tus providers y Guardar. Ver
 `docs/superpowers/specs/2026-09-26-app-wide-providers-design.md` para el detalle completo.
 
+Nota: sin Supabase configurado (o antes de que el admin guarde algo), la app no tiene
+ningún provider disponible — ya no hay edición local de respaldo. Al abrir la extensión por
+primera vez, si aparece un aviso de "Conceder permisos", haz clic para que las comprobaciones
+en segundo plano funcionen con los providers del admin.
+
 ### Grupos
 La pestaña "Grupos" (popup y PWA) son playlists de orden de visionado: reordenan y filtran ítems que ya
 tienes en tu lista, cada paso con su rango `desde`/`hasta` y episodios a excluir (fillers). El progreso

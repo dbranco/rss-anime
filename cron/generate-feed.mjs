@@ -62,6 +62,7 @@ async function publish(token, xml) {
 
 const [appConfig] = await rest("app_config?select=providers&id=eq.1");
 const providers = appConfig?.providers || [];
+if (!providers.length) console.warn("app_config vacío: ningún provider configurado todavía");
 const settings = await rest("user_settings?select=user_id,feed_token");
 const watch = await rest("watchlist?select=*&deleted=eq.false");
 const found = await rest("episodes_found?select=*&order=found_at.desc");
