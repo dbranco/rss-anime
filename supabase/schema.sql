@@ -13,27 +13,26 @@ create table if not exists public.user_settings (
 -- Lista de series de cada usuario. deleted = borrado lógico para propagarlo entre máquinas.
 create table if not exists public.watchlist (
   user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  provider_id text not null,
-  slug        text not null,
+  tmdb_id     int  not null,
+  media_type  text not null,
   title       text not null,
-  link        text,
-  image       text,
+  poster_path text,
   last        int  not null default 0,
+  players     jsonb not null default '{}'::jsonb,
   deleted     boolean not null default false,
   updated_at  timestamptz not null default now(),
-  primary key (user_id, provider_id, slug)
+  primary key (user_id, tmdb_id)
 );
 
 -- Episodios detectados por el cron. Solo el cron (service_role) escribe aquí.
 create table if not exists public.episodes_found (
   user_id     uuid not null references auth.users(id) on delete cascade,
-  provider_id text not null,
-  slug        text not null,
+  tmdb_id     int  not null,
   episode     int  not null,
   title       text not null,
   link        text not null,
   found_at    timestamptz not null default now(),
-  primary key (user_id, provider_id, slug, episode)
+  primary key (user_id, tmdb_id, episode)
 );
 
 -- Row Level Security: cada usuario solo ve y modifica lo suyo.
@@ -79,7 +78,8 @@ on conflict (id) do nothing;
 -- docs/superpowers/specs/2026-09-26-app-wide-providers-design.md
 create table if not exists public.app_config (
   id         int primary key default 1,
-  providers  jsonb not null default '[]'::jsonb,
+  players    jsonb not null default '{}'::jsonb,
+  tmdb_key   text,
   updated_at timestamptz not null default now(),
   constraint app_config_singleton check (id = 1)
 );
