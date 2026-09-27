@@ -1,15 +1,15 @@
 En este directorio hay un proyecto "Series Tracker" ya escrito. Lee README.md primero.
 
-Resumen: extensión Chromium MV3 (extension/) con providers en JSON y un motor genérico (engine.js) que
+Resumen: extensión Chromium MV3 (src/extension/) con providers en JSON y un motor genérico (engine.js) que
 busca series, lista episodios y comprueba si existe el siguiente; la lista y los providers se sincronizan
 con Supabase (supabase/schema.sql, login email+contraseña, gana el updated_at más reciente, borrado lógico);
 y un cron (cron/generate-feed.mjs) que reutiliza el mismo engine.js con jsdom, guarda los episodios nuevos
 en episodes_found y publica un feed RSS por usuario en Supabase Storage.
 
 Tareas:
-1. Ejecuta `npm install && bash tests/run.sh`. Deben pasar motor, sync entre dos máquinas y cron.
+1. Ejecuta `npm install && npm test`. Deben pasar motor, sync entre dos máquinas y cron.
    Si algo falla, corrígelo y dime qué cambiaste.
-2. Revisa extension/ (background.js, popup.js, options.js, sync.js, manifest.json) buscando errores típicos
+2. Revisa src/extension/ (background.js, popup.js, options.js, sync.js) y src/manifest.json buscando errores típicos
    de MV3 (service worker, offscreen document, permisos opcionales, mensajería, sync con condiciones de carrera).
    Corrige lo que encuentres y explícamelo.
 3. Guíame para poner Supabase en marcha: dime qué ejecutar en el SQL Editor y qué claves copiar. Nunca

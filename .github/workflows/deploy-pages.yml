@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "src/web/**"
+      - "src/app/**"
   workflow_dispatch: {}
 
 permissions:
@@ -27,6 +28,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: src/web
+          path: src
       - id: deployment
         uses: actions/deploy-pages@v4

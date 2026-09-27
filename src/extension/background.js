@@ -33,7 +33,7 @@ async function ensureOffscreen() {
   const ctx = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
   if (!ctx.length) {
     await chrome.offscreen.createDocument({
-      url: "offscreen.html",
+      url: "extension/offscreen.html",
       reasons: ["DOM_PARSER"],
       justification: "Parsear el HTML de las webs configuradas"
     });
@@ -76,7 +76,7 @@ async function checkAll() {
       news.unshift({ id, provider: it.provider, slug: it.slug, episode: n,
                      title: `${it.title} — episodio ${n}`, link: r.url });
       chrome.notifications.create(id, {
-        type: "basic", iconUrl: "icons/icon128.png",
+        type: "basic", iconUrl: "extension/icons/icon128.png",
         title: "Nuevo episodio", message: `${it.title} — episodio ${n}`
       });
     }
@@ -114,7 +114,7 @@ async function checkGroups() {
     news.unshift({ id, provider: cur.step.provider, slug: cur.step.slug, episode: cur.next,
                    title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
     chrome.notifications.create(id, {
-      type: "basic", iconUrl: "icons/icon128.png",
+      type: "basic", iconUrl: "extension/icons/icon128.png",
       title: "Nuevo episodio (grupo)", message: `${g.name}: ${title} — episodio ${cur.next}`
     });
   }
@@ -135,7 +135,7 @@ async function run() {
 
 chrome.runtime.onInstalled.addListener(async () => {
   if (!(await get("providers"))) {
-    const r = await fetch(chrome.runtime.getURL("providers.example.json"));
+    const r = await fetch(chrome.runtime.getURL("extension/providers.example.json"));
     await set("providers", await r.json());
   }
   schedule();

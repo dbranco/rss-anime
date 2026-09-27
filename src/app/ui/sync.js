@@ -6,7 +6,7 @@ let syncing = null;
 // perder el foco, cancelando cualquier fetch en curso, así que centraliza y deduplica ahí. La
 // PWA no tiene ese contexto persistente — sincroniza aquí mismo con dedup en memoria.
 export function requestSync() {
-  if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+  if (typeof chrome !== "undefined" && chrome.runtime?.id) {
     return chrome.runtime.sendMessage({ type: "sync" }).then(r => {
       if (!r?.ok) throw new Error(r?.error || "Sync fallida");
     });

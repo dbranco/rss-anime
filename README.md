@@ -5,6 +5,7 @@ Tres piezas que comparten el mismo motor de scraping (`src/app/engine.js`):
 | Pieza | Para qué |
 |---|---|
 | `src/extension/` | Extensión Chromium (MV3): buscas, guardas series, ves episodios y recibes notificaciones |
+| `src/web/` | PWA: la misma interfaz servida como página web (para cuando no puedes instalar la extensión) |
 | `supabase/schema.sql` | Tablas + RLS: lista y grupos por usuario, providers compartidos por toda la app |
 | `cron/generate-feed.mjs` | Revisa la lista de cada usuario en Supabase y publica su feed RSS |
 
@@ -21,7 +22,8 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 4. Settings → API: copia la URL, la clave `anon` (va en la extensión) y la `service_role` (SOLO para el cron).
 
 ## 2. Extensión
-1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `src/extension/`.
+1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `src/` (el manifest vive en
+   `src/manifest.json`; carga esa carpeta, no `src/extension/`, para que `../app/...` resuelva).
 2. Solo la cuenta admin edita providers (⚙ Opciones en la extensión, o Config en la PWA): pega
    el JSON y guarda (acepta el permiso del dominio). El resto de cuentas los reciben ya listos
    al sincronizar — ver "Providers como config de la app" más abajo.
@@ -30,6 +32,12 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 4. Opciones muestra la URL de tu feed RSS cuando el cron ya lo ha generado.
 
 Conflictos: gana el cambio más reciente (`updated_at`). Los borrados se propagan (`deleted`).
+
+### PWA / GitHub Pages
+`.github/workflows/deploy-pages.yml` sube todo `src/` (no solo `src/web/`) como artefacto de Pages, porque
+`src/web/` importa código compartido de `src/app/` con rutas `../app/...` que necesitan `src/` como raíz
+servida. Esto desplaza la PWA a `<url-de-tu-pages>/web/` — la raíz del sitio (`<url-de-tu-pages>/`) no sirve
+`index.html`. Actívalo en Settings → Pages → Source → "GitHub Actions".
 
 ### Providers como config de la app
 
@@ -83,9 +91,10 @@ Necesita Node 20+ (`npm install`).
   y publícalo en otro hosting.
 
 ## Pruebas
-`npm install && bash tests/run.sh` levanta una web falsa y un Supabase falso y prueba: motor, sincronización
-entre dos "máquinas" (subida, bajada, progreso, borrado y restauración), grupos (`tests/test-groups.mjs`:
-paso actual, exclusiones, CRUD) y cron (feed sin duplicados).
+`npm install && npm test` (equivalente a `bash src/test/run.sh`) levanta una web falsa y un Supabase falso y
+prueba: motor, sincronización entre dos "máquinas" (subida, bajada, progreso, borrado y restauración), grupos
+(`src/test/groups.spec.js`: paso actual, exclusiones, CRUD), cron (feed sin duplicados) y que el empaquetado
+de la extensión y de la PWA (`src/test/packaging.spec.js`) no tenga imports que se salgan de `src/`.
 No cubre el popup ni las notificaciones en un Chromium real.
 
 ## Límites

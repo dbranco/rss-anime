@@ -26,7 +26,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
     item.image ? el("img", { src: safe(item.image) }) : "",
     el("div", { className: "body" },
       el("b", { textContent: item.title }),
-      el("div", { textContent: "Visto hasta el episodio " + (item.last || 0) }),
+      el("div", { className: "st", textContent: "Visto hasta el episodio " + (item.last || 0) }),
       el("div", { className: "actions" },
         btn("Siguiente", async () => {
           const p = prov(item.provider);
