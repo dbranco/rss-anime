@@ -146,7 +146,7 @@ export async function saveAppProviders(arr) {
 async function syncWatchlist(uid) {
   const remote = (await rest(`watchlist?select=*&user_id=eq.${uid}`)).map(r => ({
     provider: r.provider_id, slug: r.slug, title: r.title, link: r.link, image: r.image,
-    last: r.last, deleted: r.deleted, updated_at: r.updated_at
+    last: r.last, visible: r.visible !== false, deleted: r.deleted, updated_at: r.updated_at
   }));
   const local = await get("watchlist", []);
   const snapshot = JSON.stringify(local);
@@ -164,7 +164,7 @@ async function syncWatchlist(uid) {
       body: toPush.map(x => ({
         user_id: uid, provider_id: x.provider, slug: x.slug, title: x.title,
         link: x.link || null, image: x.image || null, last: x.last || 0,
-        deleted: !!x.deleted, updated_at: x.updated_at
+        visible: x.visible !== false, deleted: !!x.deleted, updated_at: x.updated_at
       }))
     });
   }
