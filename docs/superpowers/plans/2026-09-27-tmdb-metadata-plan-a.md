@@ -1517,6 +1517,7 @@ git commit -m "feat: notificaciones y feed vía fecha de emisión de TMDB, quita
 **Files:**
 - Modify: `src/test/list.spec.js`, `src/test/groups.spec.js`
 - Modify: `src/test/integration/sync-cron.spec.js`
+- Modify: `src/test/ui/permissions.spec.js`
 - Modify: `src/test/mock_supabase.py`, `src/test/mock_site.py` (si el
   segundo mockea `series`/episodios por HTML — revisa si sigue haciendo
   falta tras Task 7, probablemente ya no)
@@ -1553,7 +1554,24 @@ también sirva TMDB (o que el test mockee `tmdb.js` directamente
 sembrando `tmdb_key` + `fetch` stub, como en Task 1 — más simple que
 levantar un tercer servidor mock).
 
-- [ ] **Step 3: Escribir src/test/ui/resolve.spec.js**
+- [ ] **Step 3: Corregir src/test/ui/permissions.spec.js**
+
+Hallazgo de la revisión de Task 5: `state.providers.push(...)` y
+`mod.setWatchlistCache([...])` ya no existen — `state.js` quedó reducido
+a `getLangPref`/`setLangPref`, y `permissions.js` ya no exporta
+`watchlistCache`/`setWatchlistCache` (Task 5 los eliminó junto con el
+resto del array plano de providers). El tercer `it()` de este archivo
+("con chrome.permissions, ensurePermissions pide los orígenes de la
+watchlist") necesita reescribirse contra el modelo nuevo: siembra
+`app_config`'s `players` (vía `set("players", {...})`, no
+`state.providers.push`) con al menos una entrada con un `base_url`
+real, mockea `chrome.permissions.request`, y confirma que los orígenes
+pedidos incluyen tanto ese `base_url` como `TMDB_ORIGIN`
+(`https://api.themoviedb.org/*`) — que `permissions.js` ahora siempre
+incluye. Los otros dos `it()` de este archivo (sin `chrome.permissions`)
+siguen funcionando sin cambios.
+
+- [ ] **Step 4: Escribir src/test/ui/resolve.spec.js**
 
 Cubre `resolveAndPlay`/`resolveSlug` de Task 6: sin ningún `rule`
 configurado para el idioma → mensaje claro sin reventar; con un `rule`
@@ -1562,7 +1580,7 @@ elegir; con slug ya cacheado en `item.players` → no vuelve a buscar
 (usa el mismo mock-site que ya existe para `engine.search`/
 `episodePlayers`, no hace falta uno nuevo).
 
-- [ ] **Step 4: Verificar**
+- [ ] **Step 5: Verificar**
 
 ```bash
 npm test
@@ -1570,7 +1588,7 @@ npm test
 Debe pasar en verde completo — esta es la primera vez desde Task 3 que
 toda la suite corre sobre el modelo nuevo de punta a punta.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/test/
