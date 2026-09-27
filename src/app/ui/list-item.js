@@ -12,7 +12,7 @@ const epsSel = new Map(); // tmdb_id -> episodio seleccionado, o null
 // pierde avatar real y el botón "Visto" desaparece), así que "Quitar" lo bloquea si hay alguno.
 function groupsReferencing(item, myGroups, subGroups) {
   return [...myGroups, ...subGroups]
-    .filter(g => (g.steps || []).some(s => s.provider === item.provider && s.slug === item.slug))
+    .filter(g => (g.steps || []).some(s => s.tmdb_id === item.tmdb_id))
     .map(g => g.name);
 }
 

@@ -25,19 +25,19 @@ describe("ui/permissions: detección de entorno", () => {
   });
 
   it("con chrome.permissions, ensurePermissions pide los orígenes de la watchlist", async () => {
+    // Hallazgo de la revisión de Task 5: state.js quedó reducido a getLangPref/setLangPref (ya no
+    // hay array plano de providers), y permissions.js ya no exporta watchlistCache/
+    // setWatchlistCache — ahora lee la config de sitios directo de "players" (store.js), sembrada
+    // por chrome.storage.local como en el resto de este archivo. allOrigins() siempre añade
+    // TMDB_ORIGIN además de cada base_url de "players" (ver src/app/ui/permissions.js, Task 5).
     let requested = null;
-    globalThis.chrome = { permissions: { request: async o => { requested = o; return true; }, contains: async () => true } };
+    const players = { "es-ES": { sub: [{ id: "mock", rule: { base_url: "http://127.0.0.1:8001" } }], dub: [] } };
+    globalThis.chrome = {
+      storage: { local: { get: async k => (k === "players" ? { players } : {}), set: async () => {} } },
+      permissions: { request: async o => { requested = o; return true; }, contains: async () => true }
+    };
     const mod = await import("../../app/ui/permissions.js?withchrome");
-    // OJO: permissions.js importa "./state.js" con un specifier SIN query, así que su `prov()`
-    // interno lee siempre la instancia de state.js "plana" (sin query) — la misma en todo este
-    // archivo, cacheada por Node desde la primera vez que se cargó. Para que este test vea el
-    // provider que empuja aquí, hay que importar state.js igual, SIN query (no "?withchrome":
-    // eso crearía una instancia nueva y distinta, con su propio array `providers` vacío, que
-    // permissions.js nunca vería).
-    const state = await import("../../app/ui/state.js");
-    state.providers.push({ id: "mock", base_url: "http://127.0.0.1:8001" });
-    mod.setWatchlistCache([{ provider: "mock" }]);
     await mod.ensurePermissions();
-    assert.deepEqual(requested, { origins: ["http://127.0.0.1/*"] });
+    assert.deepEqual(new Set(requested.origins), new Set(["http://127.0.0.1/*", "https://api.themoviedb.org/*"]));
   });
 });

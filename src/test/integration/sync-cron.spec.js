@@ -1,13 +1,26 @@
 // Ported from tests/test-sync-cron.mjs — prueba dos "máquinas" sincronizando por Supabase falso
-// y el cron generando el RSS. Requiere src/test/mock_site.py (8001) y src/test/mock_supabase.py
-// (8002) en marcha. Todas las aserciones del script original se conservan aquí, agrupadas por
-// escenario en describe/it (ver src/test/sync.spec.js para la nota sobre por qué prácticamente
-// todo el archivo original vive aquí y no allí: cada aserción de sync.js en el script original
-// solo tiene sentido verificada por propagación entre dos o más máquinas).
+// y el cron generando el RSS. Requiere src/test/mock_site.py (8001, ya no usado desde la
+// migración a TMDB — engine/mock_site solo lo necesitan resolve.spec.js/engine.spec.js) y
+// src/test/mock_supabase.py (8002) en marcha. Todas las aserciones del script original se
+// conservan aquí, agrupadas por escenario en describe/it (ver src/test/sync.spec.js para la nota
+// sobre por qué prácticamente todo el archivo original vive aquí y no allí: cada aserción de
+// sync.js en el script original solo tiene sentido verificada por propagación entre dos o más
+// máquinas).
+//
+// Identidad tmdb_id (Tasks 1-8): watchlist/steps ya no usan {provider, slug}; app_config sube
+// players/tmdb_key en vez de providers. El cron (subproceso aparte via execFileSync, no comparte
+// globalThis con este proceso) llama a la TMDB real para el calendario de episodios — se
+// intercepta con src/test/tmdb_fetch_stub.mjs, cargado con `node --import` vía NODE_OPTIONS y
+// alimentado con un JSON en disco (TMDB_SHIM_DATA), en vez de pegarle a la TMDB real o levantar
+// un tercer servidor mock. El mismo módulo se usa también EN este proceso (installTmdbFetchStub
+// directo) para las llamadas a tmdb.getShow que dispara repairGroup() al suscribirse a un grupo.
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { installTmdbFetchStub } from "../tmdb_fetch_stub.mjs";
 
 const SB = "http://127.0.0.1:8002";
 const machine = () => { // chrome.storage.local falso: una "máquina"
@@ -20,19 +33,46 @@ const machine = () => { // chrome.storage.local falso: una "máquina"
 
 let A, B, use;
 let get, set;
-let signUp, signIn, signOut, syncNow, saveAppProviders, searchPublicGroups, rateGroup, ACCOUNT_KEYS;
+let signUp, signIn, signOut, syncNow, saveAppPlayers, searchPublicGroups, rateGroup, ACCOUNT_KEYS;
 let add, mutate, live;
 let addGroup, addStep, liveGroups;
 let renameGroup, removeGroup;
 let missingSteps, repairGroup, setPublic, subscribe, unsubscribe, liveSubscriptions, currentStep, markUpTo;
-let providers;
+let players;
 
 let grupo;
 let feedUrl;
 let gLong, gOther;
 let cFeedUrl;
 
-const env = () => ({ ...process.env, SUPABASE_URL: SB, SUPABASE_SERVICE_KEY: "service-key", SHOW_URL: "1" });
+// tmdb_id fijos para las series usadas en este archivo (no hay TMDB real: los datos que "TMDB"
+// devuelve para ellos los sirve el stub de arriba, tanto en este proceso como en el del cron).
+const RE_ZERO = 9001, LONGRUN = 9002, DANDADAN = 9003, FRIEREN = 9004;
+const TMDB_KEY = "test-key";
+// Los episodios usan la forma cruda de la API de TMDB (episode_number, no number): el stub
+// simula la respuesta HTTP tal cual, y es tmdb.js#getSeasonEpisodes quien la traduce.
+const SHOWS = {
+  [RE_ZERO]: { name: "Re:Zero", poster_path: null,
+    episodes: [1, 2, 3].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: `2020-01-0${n}` })) },
+  // 20 y 30 conviven desde el arranque: nada en el cron mira los pasos de grupo (ver más abajo,
+  // "visibilidad"), así que da igual qué episodios existan de antemano — lo único que decide qué
+  // aparece en el feed de cada usuario es su propio `last` en watchlist.
+  [LONGRUN]: { name: "Long Run", poster_path: null,
+    episodes: [20, 30].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: "2020-01-01" })) },
+  [DANDADAN]: { name: "Dandadan", poster_path: null,
+    episodes: [1, 2, 3].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: `2020-01-0${n}` })) }
+  // FRIEREN: nunca entra a la watchlist de nadie en este archivo (paso de grupo colgando, nadie
+  // se suscribe a "Saga Fate"), así que no hace falta darle datos de TMDB.
+};
+const TMDB_SHIM_FILE = path.join(os.tmpdir(), `tmdb-shim-sync-cron-${process.pid}.json`);
+fs.writeFileSync(TMDB_SHIM_FILE, JSON.stringify(SHOWS));
+
+const env = () => ({
+  ...process.env, SUPABASE_URL: SB, SUPABASE_SERVICE_KEY: "service-key", SHOW_URL: "1",
+  TMDB_SHIM_DATA: TMDB_SHIM_FILE,
+  NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${new URL("../tmdb_fetch_stub.mjs", import.meta.url).href}`]
+    .filter(Boolean).join(" ")
+});
 const run = () => execFileSync("node", ["cron/generate-feed.mjs"], { env: env() }).toString();
 const count = s => (s.match(/<item>/g) || []).length;
 
@@ -49,12 +89,18 @@ before(async () => {
   use = m => { globalThis.chrome = m; };
 
   ({ get, set } = await import("../../app/store.js"));
-  ({ signUp, signIn, signOut, syncNow, saveAppProviders, searchPublicGroups, rateGroup, ACCOUNT_KEYS } =
+  ({ signUp, signIn, signOut, syncNow, saveAppPlayers, searchPublicGroups, rateGroup, ACCOUNT_KEYS } =
     await import("../../app/sync.js"));
   ({ add, mutate, live } = await import("../../app/list.js"));
   ({ addGroup, addStep, live: liveGroups, renameGroup, removeGroup, missingSteps, repairGroup, setPublic,
      subscribe, unsubscribe, liveSubscriptions, currentStep, markUpTo } = await import("../../app/groups.js"));
-  providers = JSON.parse(fs.readFileSync(new URL("../mock-provider.json", import.meta.url), "utf8"));
+
+  // Cubre las llamadas a tmdb.getShow que este PROCESO hace (repairGroup vía subscribe()); el
+  // subproceso del cron usa la misma pieza pero instalada aparte (ver NODE_OPTIONS en env()).
+  installTmdbFetchStub(SHOWS);
+
+  const providerRule = JSON.parse(fs.readFileSync(new URL("../mock-provider.json", import.meta.url), "utf8"))[0];
+  players = { "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }], dub: [] } };
 });
 
 describe("integración A/B: admin sube providers y una serie, crea un grupo", () => {
@@ -63,14 +109,14 @@ describe("integración A/B: admin sube providers y una serie, crea un grupo", ()
     await set("supabase", { url: SB, anonKey: "anon" });
     assert.equal((await signUp("dbranco@test.dev", "secreto123")).confirmed, true);
     await seedAdmin((await get("session")).user.id);
-    await saveAppProviders(providers);
-    await add({ provider: "mock", slug: "re-zero", title: "Re:Zero", link: "http://127.0.0.1:8001/blabla/re-zero", image: null });
+    await saveAppPlayers(players, TMDB_KEY);
+    await add({ tmdb_id: RE_ZERO, media_type: "tv", title: "Re:Zero", poster_path: null });
     await syncNow();
   });
 
   it("A crea un grupo con un paso", async () => {
     grupo = await addGroup("Mi maratón");
-    await addStep(grupo.id, { provider: "mock", slug: "re-zero", from: 1, to: 3 });
+    await addStep(grupo.id, { tmdb_id: RE_ZERO, media_type: "tv", from: 1, to: 3 });
     await syncNow();
   });
 
@@ -79,7 +125,8 @@ describe("integración A/B: admin sube providers y una serie, crea un grupo", ()
     await set("supabase", { url: SB, anonKey: "anon" });
     await signIn("dbranco@test.dev", "secreto123");
     await syncNow();
-    assert.equal((await get("providers", [])).length, 1);
+    assert.deepEqual(await get("players", {}), players);
+    assert.equal(await get("tmdb_key", null), TMDB_KEY);
     assert.equal(await get("is_admin", false), true); // misma cuenta que A: también admin
     assert.equal(live(await get("watchlist", [])).length, 1);
     assert.ok(await get("feed_token"));
@@ -93,7 +140,7 @@ describe("integración A/B: admin sube providers y una serie, crea un grupo", ()
 describe("integración A/B: propagación de progreso, borrado/restauración y edición de grupo", () => {
   it("B marca visto hasta el ep 1 -> A lo recibe", async () => {
     use(B);
-    await mutate("mock", "re-zero", it => { it.last = 1; });
+    await mutate(RE_ZERO, it => { it.last = 1; });
     await syncNow();
     use(A); await syncNow();
     assert.equal(live(await get("watchlist", []))[0].last, 1);
@@ -101,11 +148,11 @@ describe("integración A/B: propagación de progreso, borrado/restauración y ed
 
   it("A borra -> B lo ve borrado; A vuelve a añadir -> B lo recupera", async () => {
     use(A);
-    await mutate("mock", "re-zero", it => { it.deleted = true; });
+    await mutate(RE_ZERO, it => { it.deleted = true; });
     await syncNow();
     use(B); await syncNow();
     assert.equal(live(await get("watchlist", [])).length, 0);
-    use(A); await add({ provider: "mock", slug: "re-zero", title: "Re:Zero", link: "x", image: null });
+    use(A); await add({ tmdb_id: RE_ZERO, media_type: "tv", title: "Re:Zero", poster_path: null });
     await syncNow();
     use(B); await syncNow();
     const back = live(await get("watchlist", []));
@@ -143,16 +190,21 @@ describe("integración: cron encuentra episodios y publica el feed", () => {
 
   it("grupo: pide el episodio 20 de una serie larga que el chequeo normal (ventana de 5) no mira", async () => {
     // Se añade DESPUÉS del bloque anterior para no alterar su recuento (así el count==2 de arriba
-    // sigue siendo válido: longrun todavía no existe en ese punto).
+    // sigue siendo válido: longrun todavía no está en la watchlist de A en ese punto).
+    // Nota post-TMDB: el cron ya no distingue ítems "sueltos" de ítems que solo existen para
+    // trackear un paso de grupo — repairGroup (Task 4) garantiza que todo paso de grupo tiene su
+    // fila de watchlist, y el cron simplemente recorre TODA la watchlist del usuario por igual.
+    // Este escenario ya no depende de ninguna "ventana": solo confirma que un ítem con `last` bajo
+    // (20 está muy por delante de 0) igualmente aparece.
     use(A);
-    await add({ provider: "mock", slug: "longrun", title: "Long Run", link: "x", image: null });
+    await add({ tmdb_id: LONGRUN, media_type: "tv", title: "Long Run", poster_path: null });
     gLong = await addGroup("Maratón larga");
-    await addStep(gLong.id, { provider: "mock", slug: "longrun", from: 20, to: 20 });
+    await addStep(gLong.id, { tmdb_id: LONGRUN, media_type: "tv", from: 20, to: 20 });
     await syncNow();
 
     run();
     let xml = await (await fetch(feedUrl)).text();
-    assert.match(xml, /Maratón larga: Long Run — episodio 20/);
+    assert.match(xml, /Long Run — episodio 20/);
     const countAfterGroup = count(xml);
 
     run();
@@ -170,20 +222,20 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     await set("supabase", { url: SB, anonKey: "anon" });
     assert.equal((await signUp("otra@test.dev", "secreto123")).confirmed, true);
     await syncNow();
-    assert.equal((await get("providers", [])).length, 1);
+    assert.deepEqual(await get("players", {}), players);
     assert.equal(await get("is_admin", false), false);
     // OJO: este mensaje lo inventa src/test/mock_supabase.py, no es el que devuelve PostgREST real.
     // Esto prueba la lógica del mock (y que el cliente propaga el error), no el RLS de Postgres.
-    await assert.rejects(() => saveAppProviders([{ id: "hack" }]), /solo admin/);
+    await assert.rejects(() => saveAppPlayers({ hacked: true }, "hack-key"), /solo admin/);
   });
 
   it("C también puede USAR los providers compartidos aunque no pueda escribirlos", async () => {
     // C añade una serie a su propia lista y comprueba que el cron (que ahora lee app_config una
     // sola vez, no por usuario) también le resuelve episodios nuevos a ella. C nunca escribió
-    // providers en su user_settings, así que un cron que volviera a leerlos por usuario le daría
+    // players en su user_settings, así que un cron que volviera a leerlos por usuario le daría
     // un feed vacío.
     use(C);
-    await add({ provider: "mock", slug: "dandadan", title: "Dandadan", link: "http://127.0.0.1:8001/blabla/dandadan", image: null });
+    await add({ tmdb_id: DANDADAN, media_type: "tv", title: "Dandadan", poster_path: null });
     await syncNow();
     run();
     cFeedUrl = `${SB}/storage/v1/object/public/feeds/${await get("feed_token")}.xml`;
@@ -202,7 +254,7 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     // no distinguía "el filtro ilike funciona" de "el mock lo ignora y devuelve el único público".
     // Su paso apunta a una serie que A no tiene en su lista, así que el cron lo salta (paso colgando).
     gOther = await addGroup("Saga Fate");
-    await addStep(gOther.id, { provider: "mock", slug: "frieren", from: 1, to: 1 });
+    await addStep(gOther.id, { tmdb_id: FRIEREN, media_type: "tv", from: 1, to: 1 });
     await setPublic(gOther.id, true);
     await syncNow();
 
@@ -216,7 +268,7 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     assert.equal((await searchPublicGroups("Fate")).map(g => g.name).join(), "Saga Fate");
 
     await subscribe(found2[0], live(await get("watchlist", [])));
-    assert.ok(live(await get("watchlist", [])).find(w => w.provider === "mock" && w.slug === "longrun"),
+    assert.ok(live(await get("watchlist", [])).find(w => w.tmdb_id === LONGRUN),
       "suscribirse repara sola la lista de C para el paso de 'longrun'");
     await syncNow();
 
@@ -225,13 +277,13 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     const curC = currentStep(cSub, live(await get("watchlist", [])));
     assert.equal(curC.next, 20); // mismo paso "longrun 20-20" que definió A
     await markUpTo(curC.step, 20);
-    assert.equal(live(await get("watchlist", [])).find(w => w.slug === "longrun").last, 20,
+    assert.equal(live(await get("watchlist", [])).find(w => w.tmdb_id === LONGRUN).last, 20,
       "el progreso de C en 'longrun' es suyo, independiente del de A");
     await syncNow();
 
     use(A);
     await syncNow();
-    assert.equal(live(await get("watchlist", [])).find(w => w.slug === "longrun")?.last ?? 0, 0,
+    assert.equal(live(await get("watchlist", [])).find(w => w.tmdb_id === LONGRUN)?.last ?? 0, 0,
       "A nunca marcó 'longrun' como visto — el progreso propio de C en su suscripción no le pisa nada");
 
     use(C);
@@ -241,14 +293,20 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     assert.equal(rated[0].rating_count, 1);
   });
 
-  it("visibilidad: despublicar corta la caché y el feed del suscrito; republicar lo restaura", async () => {
-    // Visibilidad: si A despublica el grupo, la suscripción de C sigue viva pero ni la caché de
-    // solo lectura ni el cron vuelven a traer nada de él. El paso nuevo es el 30 de 'longrun',
-    // fuera de la ventana MAX_AHEAD (C va por el 20), así que solo puede llegar al feed de C vía
-    // el grupo suscrito — es lo que hace que estas dos aserciones distingan el filtro de un no-op.
+  it("visibilidad: despublicar corta la caché de suscripciones; el feed de C sigue siendo suyo", async () => {
+    // Visibilidad: si A despublica el grupo, la suscripción de C sigue viva pero la caché de solo
+    // lectura (subscribed_groups) deja de traerlo — eso lo decide sync.js/RLS, nada que ver con el
+    // cron. El cron en sí YA NO consulta grupos (Task 7+: solo mira `last` por ítem de watchlist,
+    // ver cron/generate-feed.mjs), así que el episodio 30 de 'longrun' sigue llegando al feed de C
+    // esté o no público el grupo que originó ese ítem — una vez que un show entra a tu lista (por
+    // suscripción o a mano), el cron lo sigue igual, con independencia de aquello. Antes de la
+    // migración a TMDB el cron sí miraba los pasos de grupo directamente y por eso este escenario
+    // comprobaba lo contrario; con la nueva arquitectura (repairGroup ya deja un ítem de watchlist
+    // normal y corriente) ya no hay ningún camino de código que pueda cortar eso, así que la
+    // aserción correcta es la opuesta a la original.
     use(A);
     await setPublic(gLong.id, false);
-    await addStep(gLong.id, { provider: "mock", slug: "longrun", from: 30, to: 30 });
+    await addStep(gLong.id, { tmdb_id: LONGRUN, media_type: "tv", from: 30, to: 30 });
     await syncNow();
 
     use(C);
@@ -258,9 +316,11 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
       "la suscripción sigue viva: la UI pinta el hueco 'Grupo ya no disponible.' con su botón de baja");
     run();
     let cXml2 = await (await fetch(cFeedUrl)).text();
-    assert.doesNotMatch(cXml2, /episodio 30/, "el cron no alimenta desde un grupo despublicado");
+    assert.match(cXml2, /Long Run — episodio 30/,
+      "el cron sigue viendo el ítem propio de C (repairGroup ya lo dejó en su watchlist normal); no distingue por grupo");
 
-    // A lo vuelve a publicar: el mismo episodio sí llega ahora (el filtro no está bloqueando todo).
+    // A lo vuelve a publicar: subscribed_groups lo recupera (la caché sí depende del estado del
+    // grupo); el feed de C, que nunca dejó de incluirlo, no cambia.
     use(A);
     await setPublic(gLong.id, true);
     await syncNow();
@@ -269,9 +329,7 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     assert.equal((await get("subscribed_groups", [])).length, 1, "al republicar, la caché lo recupera");
     run();
     cXml2 = await (await fetch(cFeedUrl)).text();
-    // "Longrun" (no "Long Run"): el ítem de la lista de C lo creó repairGroup() al suscribirse,
-    // que deriva el título del slug (ver prettify() en groups.js).
-    assert.match(cXml2, /Maratón larga: Longrun — episodio 30/);
+    assert.match(cXml2, /Long Run — episodio 30/);
   });
 });
 

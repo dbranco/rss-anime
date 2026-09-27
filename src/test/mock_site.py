@@ -29,10 +29,11 @@ class H(BaseHTTPRequestHandler):
                 f'<div class="card"><a href="/blabla/{s}"><img src="/img/{s}.jpg"><span class="card-title">{n}</span></a></div>'
                 for s, (n, _) in SERIES.items() if q in n.lower())
             return self._send(200, f"<html><body>{cards}</body></html>")
-        m = re.fullmatch(r"/blabla/([\w-]+)", u.path)
-        if m and m[1] in SERIES:
-            eps = "".join(f'<a href="/blabla/{m[1]}/{i}">Episodio {i}</a>' for i in range(1, SERIES[m[1]][1] + 1))
-            return self._send(200, f"<html><body><div class='episodes'>{eps}</div></body></html>")
+        # Nota Task 9: /blabla/{slug} SIN número de episodio (la página de listado de episodios en
+        # HTML, "series" en mock-provider.json) se quitó de aquí — era el scrape de engine.episodes(),
+        # que Task 7 eliminó (la lista de episodios viene de TMDB). engine.search() solo construye
+        # ese link a partir del catálogo, nunca lo pide; y checkEpisode/episodePlayers piden
+        # /blabla/{slug}/{episodio}, la ruta de abajo, que sigue haciendo falta.
         m = re.fullmatch(r"/blabla/([\w-]+)/(\d+)", u.path)
         if m and m[1] in SERIES and int(m[2]) <= SERIES[m[1]][1]:
             # Mismo formato que AnimeAV1 real: objeto JS con claves sin comillas, embebido

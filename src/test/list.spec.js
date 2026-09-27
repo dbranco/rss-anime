@@ -30,19 +30,19 @@ describe("groups: CRUD de pasos (addGroup/addStep/moveStep/removeStep/renameGrou
   });
 
   it("addStep añade pasos con los defaults from/to/exclude", async () => {
-    await addStep(g.id, { provider: "imdb", slug: "sw4" });
-    await addStep(g.id, { provider: "imdb", slug: "sw5" });
-    await addStep(g.id, { provider: "animeav1", slug: "clone-wars", from: 1, to: 20 });
+    await addStep(g.id, { tmdb_id: 1004, media_type: "movie" }); // sw4: A New Hope
+    await addStep(g.id, { tmdb_id: 1005, media_type: "movie" }); // sw5: Empire Strikes Back
+    await addStep(g.id, { tmdb_id: 2001, media_type: "tv", from: 1, to: 20 }); // Clone Wars
     const groups = await get("groups", []);
     assert.equal(groups[0].steps.length, 3);
-    assert.deepEqual(groups[0].steps[0], { provider: "imdb", slug: "sw4", from: 1, to: 1, exclude: [] });
+    assert.deepEqual(groups[0].steps[0], { tmdb_id: 1004, media_type: "movie", from: 1, to: 1, exclude: [] });
   });
 
   it("moveStep intercambia dos pasos", async () => {
     await moveStep(g.id, 0, 1); // sw4 <-> sw5
     const groups = await get("groups", []);
-    assert.equal(groups[0].steps[0].slug, "sw5");
-    assert.equal(groups[0].steps[1].slug, "sw4");
+    assert.equal(groups[0].steps[0].tmdb_id, 1005);
+    assert.equal(groups[0].steps[1].tmdb_id, 1004);
   });
 
   it("removeStep quita un paso por índice", async () => {
