@@ -14,13 +14,13 @@ before(async () => {
   [pMirror] = JSON.parse(fs.readFileSync(new URL("./mock-provider-mirror.json", import.meta.url), "utf8"));
 });
 
-describe("engine.search / episodes / checkEpisode", () => {
-  it("busca, lista episodios y comprueba cuáles existen (sin assert en el original, solo console.log)", async () => {
+describe("engine.search / checkEpisode", () => {
+  it("busca y comprueba cuáles episodios existen (sin assert en el original, solo console.log)", async () => {
     // El script original solo hacía console.log de estos resultados (ningún assert.*);
     // se preserva igual aquí: se ejecutan para mantener la cobertura de que no revientan,
     // sin inventar aserciones nuevas sobre valores que nunca se fijaron.
-    const res = await engine.search(p, "Re:Zero");
-    await engine.episodes(p, res[0].slug);
+    // engine.episodes() ya no existe (Task 7): la lista de episodios viene de TMDB.
+    await engine.search(p, "Re:Zero");
     await engine.checkEpisode(p, "re-zero", 3);
     await engine.checkEpisode(p, "re-zero", 4);
   });

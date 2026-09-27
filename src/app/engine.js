@@ -1,4 +1,5 @@
-// Motor genérico: lee un provider (JSON) y sabe buscar, listar episodios y comprobar uno.
+// Motor genérico: lee un provider (JSON) y sabe buscar y comprobar/resolver un episodio.
+// La lista de episodios ahora viene de TMDB (ver tmdb.js); este motor ya no la scrapea.
 // Necesita DOMParser, por eso se usa desde el popup y desde el documento offscreen.
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fill = (p, tpl, vars = {}) =>
@@ -45,27 +46,6 @@ export async function search(p, query) {
     out.push({ provider: p.id, slug: m[1], title, link, image: src ? abs(src, finalUrl) : null });
   }
   return out;
-}
-
-export async function episodes(p, slug) {
-  const s = p.series;
-  if (!s) throw new Error("Este provider no define 'series'");
-  const { status, html, finalUrl } = await fetchHtml(p, fill(p, s.url, { slug }));
-  if (status >= 400) throw new Error(`HTTP ${status}`);
-  const rx = new RegExp(s.number_regex || "(\\d+)/?$");
-  const out = [], seen = new Set();
-  for (const it of doc(html).querySelectorAll(s.item)) {
-    const a = node(it, s.link || "self");
-    const href = a && a.getAttribute("href");
-    if (!href) continue;
-    const link = abs(href, finalUrl);
-    const text = clean(it.textContent);
-    const m = rx.exec(s.number_from === "text" ? text : link);
-    if (!m || seen.has(+m[1])) continue;
-    seen.add(+m[1]);
-    out.push({ number: +m[1], title: text, link });
-  }
-  return out.sort((a, b) => a.number - b.number);
 }
 
 // URL de un episodio sin comprobar si existe (para "abrir" sin gastar una petición de red).

@@ -1,14 +1,11 @@
-import * as engine from "../engine.js";
 import * as tmdb from "../tmdb.js";
 import { get, set } from "../store.js";
 import { mutate } from "../list.js";
-import { el, link, btn, safe, explain } from "./dom.js";
-import { prov } from "./state.js";
-import { ensurePermissions } from "./permissions.js";
+import { el, btn, safe, explain } from "./dom.js";
 import { requestSync } from "./sync.js";
 import { renderItemEpisodePanel } from "./episode-panel.js";
 
-const epsSel = new Map(); // "provider|slug" -> episodio seleccionado, o null
+const epsSel = new Map(); // tmdb_id -> episodio seleccionado, o null
 
 // Nombres de los grupos (propios o suscritos) cuyo itinerario todavía usa este título.
 // Quitarlo de la lista rompería su seguimiento ahí (el paso deja de encontrar el ítem:
@@ -22,30 +19,26 @@ function groupsReferencing(item, myGroups, subGroups) {
 export function itemCard(item, myGroups, subGroups, onChange) {
   const st = el("div", { className: "st" });
   const eps = el("div", { className: "itin" });
-  const key = `${item.tmdb_id}`;
   return el("div", { className: "card" },
     item.poster_path ? el("img", { src: safe(tmdb.posterUrl(item.poster_path)) }) : "",
     el("div", { className: "body" },
       el("b", { textContent: item.title }),
       el("div", { className: "st", textContent: "Visto hasta el episodio " + (item.last || 0) }),
       el("div", { className: "actions" },
-        btn("Siguiente", async () => {
-          const p = prov(item.provider);
-          await ensurePermissions();
-          const n = (item.last || 0) + 1;
-          st.textContent = "Comprobando…";
-          try {
-            const r = await engine.checkEpisode(p, item.slug, n);
-            st.replaceChildren(r.exists ? link(r.url, `Ep ${n} disponible ▶`) : `Ep ${n}: aún no`);
-          } catch (e) { st.textContent = "Error: " + explain(e); }
-        }),
         btn("Episodios", async () => {
-          await ensurePermissions();
+          if (item.media_type === "movie") {
+            eps.replaceChildren(item.last
+              ? btn("✓ Vista (marcar no vista)", async () => { await mutate(item.tmdb_id, x => { x.last = 0; }); eps.textContent = ""; onChange(); requestSync(); })
+              : btn("Marcar vista", async () => { await mutate(item.tmdb_id, x => { x.last = 1; }); eps.textContent = ""; onChange(); requestSync(); }));
+            return;
+          }
           eps.textContent = "Cargando…";
           try {
-            const l = await engine.episodes(prov(item.provider), item.slug);
+            const lang = await get("lang_pref", "es-ES");
+            // Temporada 1 fija: soporte multi-temporada queda fuera de alcance de Plan A.
+            const l = await tmdb.getSeasonEpisodes(item.tmdb_id, 1, lang);
             const renderEps = () => {
-              const sel = epsSel.get(key);
+              const sel = epsSel.get(item.tmdb_id);
               eps.replaceChildren(
                 ...(l.length ? l.map(e => {
                   const seen = e.number <= (item.last || 0);
@@ -53,11 +46,11 @@ export function itemCard(item, myGroups, subGroups, onChange) {
                     className: "ep" + (seen ? " seen" : "") + (sel === e.number ? " selected" : ""),
                     textContent: String(e.number)
                   });
-                  badge.onclick = () => { epsSel.set(key, sel === e.number ? null : e.number); renderEps(); };
+                  badge.onclick = () => { epsSel.set(item.tmdb_id, sel === e.number ? null : e.number); renderEps(); };
                   return badge;
                 }) : ["Sin episodios"]),
                 sel != null ? renderItemEpisodePanel(item, sel, sel <= (item.last || 0), close => {
-                  if (close) epsSel.delete(key);
+                  if (close) epsSel.delete(item.tmdb_id);
                   renderEps();
                 }) : "");
             };

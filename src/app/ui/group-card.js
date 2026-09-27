@@ -1,9 +1,6 @@
-import * as engine from "../engine.js";
 import { get, set } from "../store.js";
 import * as groups from "../groups.js";
-import { el, link, btn, explain } from "./dom.js";
-import { prov } from "./state.js";
-import { ensurePermissions } from "./permissions.js";
+import { el, btn } from "./dom.js";
 import { requestSync } from "./sync.js";
 import { renderEpisodePanel } from "./episode-panel.js";
 
@@ -113,7 +110,6 @@ export function groupCard(g, watchlist, owned, onChange) {
           btn("Darse de baja", async () => { await groups.unsubscribe(g.user_id, g.id); await requestSync(); onChange(); }))));
   }
   const cur = groups.currentStep(g, watchlist);
-  const st = el("div", { className: "st" });
   const onMark = async (step, episode) => {
     const it = await groups.markUpTo(step, episode);
     if (it) {
@@ -130,19 +126,9 @@ export function groupCard(g, watchlist, owned, onChange) {
           `${cur.item ? cur.item.title : cur.step.tmdb_id} — episodio ${cur.next}` }),
         cur.item
           ? el("div", { className: "actions" },
-              btn("Siguiente", async () => {
-                const p = prov(cur.step.provider);
-                await ensurePermissions(cur.step.provider);
-                st.textContent = "Comprobando…";
-                try {
-                  const r = await engine.checkEpisode(p, cur.step.slug, cur.next);
-                  st.replaceChildren(r.exists ? link(r.url, `Ep ${cur.next} disponible ▶`) : `Ep ${cur.next}: aún no`);
-                } catch (e) { st.textContent = "Error: " + explain(e); }
-              }),
               btn("Visto", () => onMark(cur.step, cur.next)))
           : el("div", { className: "st",
-              textContent: `⚠ ${cur.step.title || cur.step.tmdb_id} ya no está en tu lista` }),
-        st);
+              textContent: `⚠ ${cur.step.title || cur.step.tmdb_id} ya no está en tu lista` }));
   const missing = groups.missingSteps(g, watchlist);
   return el("div", { className: "card" },
     el("div", { className: "body" },
