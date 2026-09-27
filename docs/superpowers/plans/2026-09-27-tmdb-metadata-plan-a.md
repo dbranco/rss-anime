@@ -1334,6 +1334,8 @@ git commit -m "feat: lista de episodios vía TMDB, quita engine.episodes() y el 
 **Files:**
 - Modify: `src/extension/background.js`
 - Modify: `cron/generate-feed.mjs`
+- Modify: `src/app/ui/list-item.js` (filtro de `news` en "Visto +1")
+- Modify: `src/app/ui/group-card.js` (mismo filtro en `onMark`)
 
 **Interfaces:**
 - Consumes: `tmdb.getSeasonEpisodes` (Task 1). Plan A implementa solo el
@@ -1473,21 +1475,38 @@ en el resto del archivo, ya no `providers`).
 resto del archivo (el `<guid>` del RSS, el filtro `inList`) cambian a
 `tmdb_id`.
 
-`buildRss`/`checkGroupEpisode` referencias a `provider_id`/`slug` en el
-resto del archivo (el `<guid>` del RSS, el filtro `inList`) cambian a
-`tmdb_id`.
+- [ ] **Step 4: Corregir el filtro de `news` en list-item.js y group-card.js**
 
-- [ ] **Step 4: Verificar**
+Hallazgo del implementador de Task 3: el botón "Visto +1" de
+`list-item.js` limpia notificaciones ya vistas con
+`news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last))`
+— `it.provider`/`it.slug` ya no existen (Task 3 los quitó), y hasta este
+punto tampoco existían en `news` (la forma vieja de una entrada de
+`news` SÍ tenía `provider`/`slug`, pero la forma nueva que este mismo
+task acaba de definir en `checkAll()`, arriba, usa `tmdb_id`). Quedó
+señalado como una brecha intencional a propósito para no adivinar la
+forma antes de que este task la definiera. Corrige a:
+
+```js
+await set("news", news.filter(n => !(n.tmdb_id === it.tmdb_id && n.episode <= it.last)));
+```
+
+Mismo cambio en `group-card.js`'s `onMark` (el handler compartido de
+"Visto" para el paso actual de un grupo) — busca ahí el mismo patrón
+`n.provider === it.provider && n.slug === it.slug` y aplícale la misma
+corrección.
+
+- [ ] **Step 5: Verificar**
 
 ```bash
-node --check src/extension/background.js src/extension/offscreen.js cron/generate-feed.mjs
+node --check src/extension/background.js src/extension/offscreen.js cron/generate-feed.mjs src/app/ui/list-item.js src/app/ui/group-card.js
 npm test
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/extension/background.js src/extension/offscreen.js cron/generate-feed.mjs
+git add src/extension/background.js src/extension/offscreen.js cron/generate-feed.mjs src/app/ui/list-item.js src/app/ui/group-card.js
 git commit -m "feat: notificaciones y feed vía fecha de emisión de TMDB, quita checkGroups()"
 ```
 
