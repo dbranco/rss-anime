@@ -14,7 +14,7 @@
 // alimentado con un JSON en disco (TMDB_SHIM_DATA), en vez de pegarle a la TMDB real o levantar
 // un tercer servidor mock. El mismo módulo se usa también EN este proceso (installTmdbFetchStub
 // directo) para las llamadas a tmdb.getShow que dispara repairGroup() al suscribirse a un grupo.
-import { describe, it, before } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -66,6 +66,7 @@ const SHOWS = {
 };
 const TMDB_SHIM_FILE = path.join(os.tmpdir(), `tmdb-shim-sync-cron-${process.pid}.json`);
 fs.writeFileSync(TMDB_SHIM_FILE, JSON.stringify(SHOWS));
+after(() => { fs.rmSync(TMDB_SHIM_FILE, { force: true }); }); // no dejar el JSON huérfano en el tmpdir
 
 const env = () => ({
   ...process.env, SUPABASE_URL: SB, SUPABASE_SERVICE_KEY: "service-key", SHOW_URL: "1",
@@ -296,14 +297,23 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
   it("visibilidad: despublicar corta la caché de suscripciones; el feed de C sigue siendo suyo", async () => {
     // Visibilidad: si A despublica el grupo, la suscripción de C sigue viva pero la caché de solo
     // lectura (subscribed_groups) deja de traerlo — eso lo decide sync.js/RLS, nada que ver con el
-    // cron. El cron en sí YA NO consulta grupos (Task 7+: solo mira `last` por ítem de watchlist,
-    // ver cron/generate-feed.mjs), así que el episodio 30 de 'longrun' sigue llegando al feed de C
-    // esté o no público el grupo que originó ese ítem — una vez que un show entra a tu lista (por
-    // suscripción o a mano), el cron lo sigue igual, con independencia de aquello. Antes de la
-    // migración a TMDB el cron sí miraba los pasos de grupo directamente y por eso este escenario
-    // comprobaba lo contrario; con la nueva arquitectura (repairGroup ya deja un ítem de watchlist
-    // normal y corriente) ya no hay ningún camino de código que pueda cortar eso, así que la
-    // aserción correcta es la opuesta a la original.
+    // cron. El cron en sí YA NO consulta grupos en absoluto (Task 8, commit 40820ae, quitó
+    // checkGroupEpisode() sin sustituir su función de filtrado — Task 7, 8dd552e, solo había
+    // quitado engine.episodes(); ver cron/generate-feed.mjs): ahora solo mira `last` por ítem de
+    // watchlist, así que el episodio 30 de 'longrun' sigue llegando al feed de C esté o no público
+    // el grupo que originó ese ítem — una vez que repairGroup() deja un show en tu lista (por
+    // suscripción o a mano), el cron lo sigue igual, con independencia de aquello.
+    //
+    // Esto documenta el comportamiento ACTUAL, que es una REGRESIÓN CONOCIDA respecto a
+    // pre-Task-8: antes, el cron acotaba las notificaciones obsoletas a MAX_AHEAD=5 episodios por
+    // delante de `last`; ahora no hay ningún tope, y encima el ítem huérfano de una suscripción
+    // despublicada/cancelada es invisible en la UI (no aparece como tarjeta suelta, visible:false),
+    // así que el usuario tampoco tiene forma de pararlo por su cuenta. La aserción ORIGINAL
+    // describía el comportamiento correcto (el cron sí debería poder cortar el feed de un grupo
+    // despublicado o de una suscripción cancelada); esta la reemplaza solo porque el código actual
+    // ya no lo cumple — no porque el cambio sea deseable. Arreglar esto necesita lógica nueva sin
+    // especificar (en cron/generate-feed.mjs + background.js + groups.js) y queda fuera del
+    // alcance de Task 9; se escala como seguimiento en vez de intentarlo acá.
     use(A);
     await setPublic(gLong.id, false);
     await addStep(gLong.id, { tmdb_id: LONGRUN, media_type: "tv", from: 30, to: 30 });
