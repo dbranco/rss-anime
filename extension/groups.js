@@ -121,15 +121,22 @@ export function missingSteps(g, watchlist) {
 
 export async function repairGroup(g, watchlist) {
   const providers = await get("providers", []);
+  // Incluye borrados: si el paso apunta a un ítem que ya existía (ej. lo quitaste sin querer y
+  // lo estás recuperando), no hay que perder su imagen/título real solo porque esta pasada de
+  // búsqueda no encuentre nada — add() ahora refresca siempre con lo que se le pase aquí.
+  const all = await get("watchlist", []);
   for (const s of missingSteps(g, watchlist)) {
-    let title = prettify(s.slug), link = null, image = null;
-    const p = providers.find(x => x.id === s.provider);
-    if (p) {
-      try {
-        const res = await engine.search(p, prettify(s.slug));
-        const hit = res.find(r => r.slug === s.slug) || res[0];
-        if (hit) { title = hit.title; link = hit.link; image = hit.image; }
-      } catch { /* sin conexión o sin match: se queda con el título derivado del slug */ }
+    const existing = all.find(w => w.provider === s.provider && w.slug === s.slug);
+    let title = existing?.title || prettify(s.slug), link = existing?.link || null, image = existing?.image || null;
+    if (!image) {
+      const p = providers.find(x => x.id === s.provider);
+      if (p) {
+        try {
+          const res = await engine.search(p, prettify(s.slug));
+          const hit = res.find(r => r.slug === s.slug) || res[0];
+          if (hit) { title = hit.title; link = hit.link; image = hit.image; }
+        } catch { /* sin conexión o sin match: se queda con lo que ya había */ }
+      }
     }
     await add({ provider: s.provider, slug: s.slug, title, link, image }, { visible: false });
   }

@@ -4,11 +4,14 @@ import { get, set } from "./store.js";
 export const live = list => list.filter(x => !x.deleted);
 const same = (x, provider, slug) => x.provider === provider && x.slug === slug;
 
-// visible=true (por defecto): la persona lo añadió a propósito (buscar y guardar,
-// incluido elegir un resultado al construir un paso de grupo) — se refrescan
-// título/link/imagen por si la búsqueda tiene mejores datos que lo que ya había.
-// visible=false: creación automática (repairGroup) solo para poder llevar el conteo
-// de episodios — nunca pisa datos ya existentes si el ítem ya estaba.
+// visible=true (por defecto): aparece como tarjeta suelta en "Mi lista" — buscar y guardar,
+// incluido elegir un resultado al construir un paso de grupo, o al repararlo. visible=false:
+// solo repairGroup, para no ensuciar la lista con algo que nadie pidió a propósito. Una vez
+// visible, nunca se baja aquí (solo con "Ocultar", acción explícita).
+// título/link/imagen SIEMPRE se refrescan con lo que traiga `r` — da igual visible o no, si
+// quien llama tiene datos mejores (una búsqueda real) deben quedar guardados. Por eso
+// repairGroup() decide con cuidado qué pasar aquí: conserva la imagen si ya había una buena,
+// para no pisarla con el placeholder cuando su propia búsqueda no encuentra nada.
 export async function add(r, { visible = true } = {}) {
   const l = await get("watchlist", []);
   const now = new Date().toISOString();
@@ -16,7 +19,8 @@ export async function add(r, { visible = true } = {}) {
   if (it) {
     it.deleted = false;
     it.updated_at = now;
-    if (visible) { it.visible = true; it.title = r.title; it.link = r.link; it.image = r.image; }
+    it.title = r.title; it.link = r.link; it.image = r.image;
+    if (visible) it.visible = true;
   } else {
     l.push({ provider: r.provider, slug: r.slug, title: r.title, link: r.link, image: r.image,
              last: 0, visible, deleted: false, updated_at: now });
