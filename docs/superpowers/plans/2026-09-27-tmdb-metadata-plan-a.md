@@ -1512,9 +1512,10 @@ git commit -m "feat: notificaciones y feed vía fecha de emisión de TMDB, quita
 
 ---
 
-### Task 9: Actualizar la suite de tests
+### Task 9: Corregir groupsReferencing() + actualizar la suite de tests
 
 **Files:**
+- Modify: `src/app/ui/list-item.js` (`groupsReferencing`, bug real)
 - Modify: `src/test/list.spec.js`, `src/test/groups.spec.js`
 - Modify: `src/test/integration/sync-cron.spec.js`
 - Modify: `src/test/ui/permissions.spec.js`
@@ -1525,7 +1526,31 @@ git commit -m "feat: notificaciones y feed vía fecha de emisión de TMDB, quita
 
 **Interfaces:**
 - Ninguna nueva — esta tarea es puramente de cobertura sobre lo ya
-  construido en Tasks 1-8.
+  construido en Tasks 1-8, más un bug real encontrado en la revisión de
+  Task 8 (ver Step 0).
+
+- [ ] **Step 0: Corregir groupsReferencing() en src/app/ui/list-item.js**
+
+Hallazgo de la revisión de Task 8: esta función (no tocada por ningún
+task anterior — nunca estuvo en el alcance de ninguno) sigue comparando
+`s.provider === item.provider && s.slug === item.slug`. Ninguno de esos
+campos existe ya (pasos de grupo usan `tmdb_id` desde Task 4; ítems de
+watchlist desde Task 3) — la comparación es `undefined === undefined`,
+siempre `true`. Efecto real: el botón "Quitar" cree que CUALQUIER grupo
+referencia CUALQUIER ítem, y bloquea borrados que deberían permitirse.
+Es un bug de verdad, no cosmético — corrige a:
+
+```js
+function groupsReferencing(item, myGroups, subGroups) {
+  return [...myGroups, ...subGroups]
+    .filter(g => (g.steps || []).some(s => s.tmdb_id === item.tmdb_id))
+    .map(g => g.name);
+}
+```
+
+Verifica con un test manual mental: dos grupos, ninguno con un paso cuyo
+`tmdb_id` coincida con el ítem que intentas quitar → `groupsReferencing`
+debe devolver `[]`, no la lista de ambos grupos.
 
 - [ ] **Step 1: Leer y reescribir src/test/list.spec.js y src/test/groups.spec.js**
 
@@ -1583,6 +1608,7 @@ elegir; con slug ya cacheado en `item.players` → no vuelve a buscar
 - [ ] **Step 5: Verificar**
 
 ```bash
+node --check src/app/ui/list-item.js
 npm test
 ```
 Debe pasar en verde completo — esta es la primera vez desde Task 3 que
@@ -1591,6 +1617,6 @@ toda la suite corre sobre el modelo nuevo de punta a punta.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/test/
-git commit -m "test: actualizar suite completa al modelo de identidad tmdb_id"
+git add src/app/ui/list-item.js src/test/
+git commit -m "fix: groupsReferencing() comparaba campos inexistentes (bloqueaba Quitar siempre); test: actualizar suite completa al modelo de identidad tmdb_id"
 ```
