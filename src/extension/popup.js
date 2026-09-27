@@ -1,13 +1,15 @@
 import { getSession } from "../app/sync.js";
-import { $, msg, explain } from "./ui/dom.js";
-import { fillProviders } from "./ui/state.js";
-import { ensurePermissions } from "./ui/permissions.js";
-import { requestSync } from "./ui/sync.js";
-import { renderMain, setListFilter } from "./ui/main-list.js";
+import { $, explain } from "../app/ui/dom.js";
+import { fillProviders } from "../app/ui/state.js";
+import { ensurePermissions } from "../app/ui/permissions.js";
+import { requestSync } from "../app/ui/sync.js";
+import { renderMain, setListFilter } from "../app/ui/main-list.js";
 import { renderNews } from "./ui/news.js";
-import "./ui/search.js";
-import "./ui/group-builder.js";
-import "./ui/explore.js";
+import "../app/ui/search.js";
+import "../app/ui/group-builder.js";
+import "../app/ui/explore.js";
+
+const msg = t => { $("#msg").textContent = t || ""; };
 
 $("#tabAll").onclick = () => setView("all");
 $("#tabExplore").onclick = () => setView("explore");

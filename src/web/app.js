@@ -2,14 +2,14 @@ import "./proxy.js"; // registra globalThis.__seriesTrackerFetch antes de usar e
 import { get, set } from "../app/store.js";
 import { signIn, signUp, signOut, getSession } from "../app/sync.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
-import { $, explain } from "./ui/dom.js";
-import { fillProviders } from "./ui/state.js";
-import { requestSync } from "./ui/sync.js";
-import { renderMain, setListFilter } from "./ui/main-list.js";
+import { $, explain } from "../app/ui/dom.js";
+import { fillProviders } from "../app/ui/state.js";
+import { requestSync } from "../app/ui/sync.js";
+import { renderMain, setListFilter } from "../app/ui/main-list.js";
 import { renderConfig } from "./ui/config.js";
-import "./ui/search.js";
-import "./ui/group-builder.js";
-import "./ui/explore.js";
+import "../app/ui/search.js";
+import "../app/ui/group-builder.js";
+import "../app/ui/explore.js";
 
 $("#tabAll").onclick = () => setView("all");
 $("#tabExplore").onclick = () => setView("explore");

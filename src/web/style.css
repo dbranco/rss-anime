@@ -13,7 +13,7 @@ header {
 h1 { font-size: 1.25rem; margin: 0; }
 h2 { font-size: 1rem; margin: 22px 0 6px; display: flex; align-items: center; justify-content: space-between; }
 #cloud { font-size: .8rem; opacity: .7; }
-.hint { font-size: .85rem; opacity: .75; margin: 2px 0 8px; }
+.hint, .st { font-size: .85rem; opacity: .75; margin: 2px 0 8px; }
 .msg { min-height: 1.2em; color: #c60; font-size: .9rem; }
 input, select, button, textarea {
   font: inherit; padding: 10px 12px; border-radius: 8px;

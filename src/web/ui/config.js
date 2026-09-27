@@ -1,7 +1,7 @@
-import { get } from "../../extension/store.js";
-import { saveAppProviders } from "../../extension/sync.js";
-import { $, explain } from "./dom.js";
-import { fillProviders } from "./state.js";
+import { get } from "../../app/store.js";
+import { saveAppProviders } from "../../app/sync.js";
+import { $, explain } from "../../app/ui/dom.js";
+import { fillProviders } from "../../app/ui/state.js";
 
 export async function renderConfig() {
   $("#providersJson").value = JSON.stringify(await get("providers", []), null, 2);

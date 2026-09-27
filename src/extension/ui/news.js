@@ -1,5 +1,5 @@
-import { get, set } from "../store.js";
-import { $, el, link, btn } from "./dom.js";
+import { get, set } from "../../app/store.js";
+import { $, el, link, btn } from "../../app/ui/dom.js";
 
 export async function renderNews() {
   const news = await get("news", []);
