@@ -1,10 +1,8 @@
 import { get, set } from "../app/store.js";
 import { live } from "../app/list.js";
-import { live as liveGroups, currentStep } from "../app/groups.js";
 import { syncNow, getSession } from "../app/sync.js";
 
 const ALARM = "check";
-const MAX_AHEAD = 5;
 const NEWS_CAP = 200;
 let running = false;
 let syncPromise = null;
@@ -56,67 +54,34 @@ async function callOffscreen(op, ...args) {
   return r.data;
 }
 
+// Compara `last` contra los episodios de TMDB con `air_date` ya pasada. Cubre tanto los ítems
+// sueltos como los que solo existen para trackear un paso de grupo (visible:false) — los grupos
+// ya derivan su progreso de `last` (sin cambios), así que no hace falta un checkGroups() aparte.
 async function checkAll() {
   const list = live(await get("watchlist", []));
-  const providers = await get("providers", []);
+  const lang = await get("lang_pref", "es-ES");
   const news = await get("news", []);
   const notified = await get("notified", []);
+  const today = new Date().toISOString().slice(0, 10);
   for (const it of list) {
-    const p = providers.find(x => x.id === it.provider);
-    if (!p) continue;
+    if (it.media_type !== "tv") continue; // las películas no tienen calendario de episodios
+    let episodes;
+    try { episodes = await callOffscreen("getSeasonEpisodes", it.tmdb_id, 1, lang); }
+    catch (e) { console.warn(`Fallo en ${it.title}:`, e); continue; }
     const last = it.last || 0;
-    for (let n = last + 1; n <= last + MAX_AHEAD; n++) {
-      let r;
-      try { r = await callOffscreen("checkEpisode", p, it.slug, n); }
-      catch (e) { console.warn(`Fallo en ${it.title} ep ${n}:`, e); break; }
-      if (!r.exists) break;
-      const id = `${it.provider}-${it.slug}-e${n}`;
+    for (const e of episodes) {
+      if (e.number <= last) continue;
+      if (!e.air_date || e.air_date > today) break; // episodios vienen ordenados, el resto es futuro
+      const id = `${it.tmdb_id}-e${e.number}`;
       if (notified.includes(id)) continue;
       notified.push(id);
-      news.unshift({ id, provider: it.provider, slug: it.slug, episode: n,
-                     title: `${it.title} — episodio ${n}`, link: r.url });
+      news.unshift({ id, tmdb_id: it.tmdb_id, episode: e.number,
+                     title: `${it.title} — episodio ${e.number}`, link: null });
       chrome.notifications.create(id, {
         type: "basic", iconUrl: "extension/icons/icon128.png",
-        title: "Nuevo episodio", message: `${it.title} — episodio ${n}`
+        title: "Nuevo episodio", message: `${it.title} — episodio ${e.number}`
       });
     }
-  }
-  await set("news", news.slice(0, NEWS_CAP));
-  await set("notified", notified.slice(-500));
-}
-
-async function checkGroups() {
-  // Grupos propios + grupos suscritos (caché de solo lectura del original). El cron ya mete los
-  // episodios de los grupos suscritos en el feed RSS del suscriptor, así que las notificaciones
-  // de escritorio tienen que cubrirlos igual. Mismo filtro de visibilidad que el cron: solo
-  // mientras el grupo original siga público y sin borrar.
-  const subscribed = (await get("subscribed_groups", [])).filter(g => g.public && !g.deleted);
-  const groups = [...liveGroups(await get("groups", [])), ...subscribed];
-  if (!groups.length) return;
-  const watchlist = live(await get("watchlist", []));
-  const providers = await get("providers", []);
-  const news = await get("news", []);
-  const notified = await get("notified", []);
-  for (const g of groups) {
-    const cur = currentStep(g, watchlist);
-    if (!cur?.next) continue;
-    if (!cur.item) continue; // paso colgando: el ítem se borró de la lista (la UI ya lo avisa)
-    const p = providers.find(x => x.id === cur.step.provider);
-    if (!p) continue;
-    let r;
-    try { r = await callOffscreen("checkEpisode", p, cur.step.slug, cur.next); }
-    catch (e) { console.warn(`Fallo en grupo ${g.name}:`, e); continue; }
-    if (!r.exists) continue;
-    const id = `group-${g.id}-e${cur.next}`;
-    if (notified.includes(id)) continue;
-    notified.push(id);
-    const title = cur.item?.title || cur.step.slug;
-    news.unshift({ id, provider: cur.step.provider, slug: cur.step.slug, episode: cur.next,
-                   title: `${g.name}: ${title} — episodio ${cur.next}`, link: r.url });
-    chrome.notifications.create(id, {
-      type: "basic", iconUrl: "extension/icons/icon128.png",
-      title: "Nuevo episodio (grupo)", message: `${g.name}: ${title} — episodio ${cur.next}`
-    });
   }
   await set("news", news.slice(0, NEWS_CAP));
   await set("notified", notified.slice(-500));
@@ -129,7 +94,6 @@ async function run() {
   try {
     try { if (await getSession()) await requestSync(); } catch (e) { console.warn("Sync fallida:", e); }
     await checkAll();
-    await checkGroups();
   } finally { running = false; }
 }
 
@@ -149,7 +113,9 @@ chrome.storage.onChanged.addListener((c, area) => {
 });
 chrome.notifications.onClicked.addListener(async id => {
   const n = (await get("news", [])).find(x => x.id === id);
-  if (n) chrome.tabs.create({ url: n.link });
+  // Ya no siempre hay una URL directa al episodio (TMDB solo confirma que "ya emitió"): sin
+  // link no hay adónde navegar, así que simplemente no se abre pestaña (Plan A).
+  if (n?.link) chrome.tabs.create({ url: n.link });
   chrome.notifications.clear(id);
 });
 chrome.runtime.onMessage.addListener((m, _s, send) => {

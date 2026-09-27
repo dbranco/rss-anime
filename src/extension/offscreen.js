@@ -1,5 +1,6 @@
 import { search, episodes, checkEpisode } from "../app/engine.js";
-const ops = { search, episodes, checkEpisode };
+import * as tmdb from "../app/tmdb.js";
+const ops = { search, episodes, checkEpisode, getSeasonEpisodes: tmdb.getSeasonEpisodes };
 
 chrome.runtime.onMessage.addListener((m, _sender, send) => {
   if (m.target !== "offscreen" || !ops[m.op]) return;

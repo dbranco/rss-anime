@@ -61,7 +61,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
           const it = await mutate(item.tmdb_id, x => { x.last = (x.last || 0) + 1; });
           if (it) {
             const news = await get("news", []);
-            await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+            await set("news", news.filter(n => !(n.tmdb_id === it.tmdb_id && n.episode <= it.last)));
           }
           onChange(); requestSync();
         }),

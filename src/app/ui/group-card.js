@@ -114,7 +114,7 @@ export function groupCard(g, watchlist, owned, onChange) {
     const it = await groups.markUpTo(step, episode);
     if (it) {
       const news = await get("news", []);
-      await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
+      await set("news", news.filter(n => !(n.tmdb_id === it.tmdb_id && n.episode <= it.last)));
     }
     onChange(); requestSync();
   };
