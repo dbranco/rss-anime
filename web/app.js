@@ -160,6 +160,12 @@ function itemCard(item, myGroups, subGroups) {
           }
           renderMain(); requestSync();
         }),
+        btn("Ocultar", async () => {
+          // A diferencia de Quitar, esconder no borra nada ni rompe el seguimiento de ningún
+          // grupo: el ítem sigue en watchlist, solo deja de mostrarse como tarjeta suelta.
+          await mutate(item.provider, item.slug, x => { x.visible = false; });
+          renderMain(); requestSync();
+        }),
         btn("Quitar", async () => {
           const refs = groupsReferencing(item, myGroups, subGroups);
           if (refs.length) {
@@ -634,7 +640,7 @@ $("#stepSearchBtn").onclick = async () => {
     const res = await engine.search(p, q);
     $("#stepSearchResults").replaceChildren(...(res.length
       ? res.map(r => btn(r.title, async () => {
-          await add(r);
+          await add(r, { visible: false }); // solo para el paso, no es media añadida a propósito
           draftSteps.push({ provider: r.provider, slug: r.slug, ...readRange() });
           clearRange();
           renderDraftSteps();
@@ -692,7 +698,8 @@ $("#importSearchBtn").onclick = async () => {
       const res = await engine.search(prov(row.provider), row.title);
       list.replaceChildren(...(res.length
         ? res.map(r => btn(r.title, async () => {
-            await add(r); // sin esto el paso apuntaría a un ítem que no existe en tu lista
+            // solo para el paso, no es media añadida a propósito (sin esto el paso apuntaría a un ítem que no existe)
+            await add(r, { visible: false });
             draftSteps.push({ provider: row.provider, slug: r.slug, from: row.from, to: row.to, exclude: row.exclude });
             renderDraftSteps();
             box.remove();
