@@ -556,8 +556,12 @@ $("#go").onclick = async () => {
   const settled = await Promise.allSettled(targets.map(p =>
     engine.search(p, q).then(res => res.map(r => ({ ...r, _providerName: p.name || p.id })))));
   const merged = settled.flatMap(r => (r.status === "fulfilled" ? r.value : []));
-  const failed = settled.filter(r => r.status === "rejected").length;
-  $("#searchMsg").textContent = merged.length ? (failed ? `${failed} provider(s) fallaron al buscar` : "") : "Sin resultados";
+  const rejected = settled.filter(r => r.status === "rejected");
+  // Si TODOS los providers fallaron, "Sin resultados" mentiría (parece "no hay nada" cuando en
+  // realidad la búsqueda ni se pudo hacer) — se muestra el error real del primero.
+  $("#searchMsg").textContent = merged.length
+    ? (rejected.length ? `${rejected.length} provider(s) fallaron al buscar` : "")
+    : (rejected.length ? "Error: " + explain(rejected[0].reason) : "Sin resultados");
   $("#results").replaceChildren(...merged.map(r => el("div", { className: "card" },
     r.image ? el("img", { src: safe(r.image) }) : "",
     el("div", { className: "body" }, el("b", { textContent: r.title }),
