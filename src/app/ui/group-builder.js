@@ -1,9 +1,8 @@
-import * as engine from "../engine.js";
+import * as tmdb from "../tmdb.js";
 import { get } from "../store.js";
 import { live, add } from "../list.js";
 import * as groups from "../groups.js";
 import { $, el, btn, explain } from "./dom.js";
-import { providers, prov } from "./state.js";
 import { ensurePermissions } from "./permissions.js";
 import { requestSync } from "./sync.js";
 import { renderMain } from "./main-list.js";
@@ -14,7 +13,7 @@ let importDraft = [];
 function renderDraftSteps() {
   $("#groupSteps").replaceChildren(...draftSteps.map((s, i) => el("div", { className: "row" },
     el("span", { textContent:
-      `${i + 1}. ${s.slug} (${s.from}-${s.to}${s.exclude.length ? ", excl " + s.exclude.join(",") : ""})` }),
+      `${i + 1}. ${s.title} (${s.from}-${s.to}${s.exclude.length ? ", excl " + s.exclude.join(",") : ""})` }),
     btn("↑", () => { if (i > 0) { [draftSteps[i - 1], draftSteps[i]] = [draftSteps[i], draftSteps[i - 1]]; renderDraftSteps(); } }),
     btn("↓", () => { if (i < draftSteps.length - 1) { [draftSteps[i + 1], draftSteps[i]] = [draftSteps[i], draftSteps[i + 1]]; renderDraftSteps(); } }),
     btn("✕", () => { draftSteps.splice(i, 1); renderDraftSteps(); }))));
@@ -28,46 +27,49 @@ const readRange = () => ({
 const clearRange = () => { $("#stepFrom").value = "1"; $("#stepTo").value = "1"; $("#stepExclude").value = ""; };
 
 $("#addStepBtn").onclick = () => {
-  const [provider, slug] = ($("#stepItem").value || "").split("|");
-  if (!provider) return;
-  draftSteps.push({ provider, slug, ...readRange() });
+  const tmdbId = +($("#stepItem").value || 0);
+  if (!tmdbId) return;
+  const item = watchlistCache.find(w => w.tmdb_id === tmdbId);
+  draftSteps.push({ tmdb_id: tmdbId, media_type: item?.media_type || "tv", title: item?.title || `#${tmdbId}`, ...readRange() });
   clearRange();
   renderDraftSteps();
 };
 
-// Alternativa a "elige de tu lista": buscar directamente en un provider concreto y añadir el
-// paso con ESE provider+slug, sin tocar la entrada de esa serie que ya tuvieras (si la tenías
-// con otro provider). Igual que hace el asistente de import, guarda en la lista antes de
-// añadir el paso — si no, el paso apuntaría a un ítem que no existe.
-$("#stepSearchBtn").onclick = async () => {
-  const p = prov($("#stepSearchProv").value);
-  const q = $("#stepSearchQ").value.trim();
-  if (!p || !q) return;
-  await ensurePermissions(p.id);
-  $("#stepSearchResults").replaceChildren("Buscando…");
+// Búsqueda de TMDB reutilizable tanto para "añadir un paso nuevo" como para el asistente de
+// import — un paso siempre referencia un tmdb_id, nunca un sitio de reproducción concreto.
+async function searchAndPick(query, onPick) {
+  await ensurePermissions(); // incluye api.themoviedb.org — ver permissions.js (Task 5)
+  const lang = await get("lang_pref", "es-ES");
+  const box = el("div", { textContent: "Buscando…" });
   try {
-    const res = await engine.search(p, q);
-    $("#stepSearchResults").replaceChildren(...(res.length
-      ? res.map(r => btn(r.title, async () => {
-          await add(r, { visible: false }); // solo para el paso, no es media añadida a propósito
-          draftSteps.push({ provider: r.provider, slug: r.slug, ...readRange() });
-          clearRange();
-          renderDraftSteps();
-          $("#stepSearchResults").replaceChildren();
-          $("#stepSearchQ").value = "";
-        }))
+    const res = await tmdb.search(query, lang);
+    box.replaceChildren(...(res.length
+      ? res.map(r => btn(`${r.title}${r.year ? " (" + r.year + ")" : ""}`, () => onPick(r)))
       : ["Sin resultados"]));
-  } catch (e) { $("#stepSearchResults").replaceChildren("Error: " + explain(e)); }
+  } catch (e) { box.textContent = "Error: " + explain(e); }
+  return box;
+}
+
+$("#stepSearchBtn").onclick = async () => {
+  const q = $("#stepSearchQ").value.trim();
+  if (!q) return;
+  $("#stepSearchResults").replaceChildren(await searchAndPick(q, async r => {
+    await add(r, { visible: false }); // solo para el paso, no es media añadida a propósito
+    draftSteps.push({ tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title, ...readRange() });
+    clearRange();
+    renderDraftSteps();
+    $("#stepSearchResults").replaceChildren();
+    $("#stepSearchQ").value = "";
+  }));
 };
 
-// Paso 1: pegar el JSON de una IA (título + rango) y leerlo.
 $("#importParseBtn").onclick = () => {
   let data;
   try { data = JSON.parse($("#importJson").value); }
   catch (e) { $("#groupMsg").textContent = "JSON inválido: " + e.message; return; }
   if (data.name) $("#groupName").value = data.name;
   importDraft = (data.steps || []).map(s => ({
-    title: s.title || "", from: s.from ?? 1, to: s.to ?? 1, exclude: s.exclude || [], provider: null
+    title: s.title || "", from: s.from ?? 1, to: s.to ?? 1, exclude: s.exclude || []
   }));
   renderImportRows();
   $("#importAssign").hidden = false;
@@ -76,45 +78,30 @@ $("#importParseBtn").onclick = () => {
 };
 
 function renderImportRows() {
-  $("#importRows").replaceChildren(...importDraft.map((row, i) => el("div", { className: "row" },
-    el("input", { type: "checkbox", id: `imp${i}` }),
-    el("span", { textContent: `${row.title}${row.provider ? " → " + (prov(row.provider)?.name || row.provider) : ""}` }))));
+  $("#importRows").replaceChildren(...importDraft.map(row => el("div", { className: "row" },
+    el("span", { textContent: row.title }))));
 }
 
-// Paso 2: marcar uno o varios títulos y aplicarles el provider elegido a la vez.
-$("#importApplyBtn").onclick = () => {
-  const p = $("#importProviderPick").value;
-  if (!p) return;
-  let n = 0;
-  importDraft.forEach((row, i) => { if ($("#imp" + i).checked) { row.provider = p; n++; } });
-  renderImportRows();
-  $("#groupMsg").textContent = n ? `Provider aplicado a ${n} título${n === 1 ? "" : "s"}.` : "Marca al menos un título primero.";
-};
-
-// Paso 3: buscar cada título en su provider y dejar elegir el resultado correcto.
+// Busca cada título del import en TMDB directamente (ya no hace falta asignar provider por
+// título primero — un paso es solo un tmdb_id).
 $("#importSearchBtn").onclick = async () => {
   if (!importDraft.length) return;
-  if (importDraft.some(r => !r.provider)) { $("#groupMsg").textContent = "Asigna un provider a todos los títulos antes de buscar"; return; }
   $("#importResults").hidden = false;
   $("#importResults").replaceChildren();
   for (const row of importDraft) {
-    const list = el("div", {});
-    const box = el("div", { className: "card" }, el("div", { className: "body" }, el("b", { textContent: row.title }), list));
+    const box = el("div", { className: "card" }, el("div", { className: "body" }, el("b", { textContent: row.title })));
     $("#importResults").append(box);
-    try {
-      const res = await engine.search(prov(row.provider), row.title);
-      list.replaceChildren(...(res.length
-        ? res.map(r => btn(r.title, async () => {
-            // solo para el paso, no es media añadida a propósito (sin esto el paso apuntaría a un ítem que no existe)
-            await add(r, { visible: false });
-            draftSteps.push({ provider: row.provider, slug: r.slug, from: row.from, to: row.to, exclude: row.exclude });
-            renderDraftSteps();
-            box.remove();
-          }))
-        : [el("span", { className: "st", textContent: "Sin resultados" })]));
-    } catch (e) { list.textContent = "Error: " + explain(e); }
+    const results = await searchAndPick(row.title, async r => {
+      await add(r, { visible: false });
+      draftSteps.push({ tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title, from: row.from, to: row.to, exclude: row.exclude });
+      renderDraftSteps();
+      box.remove();
+    });
+    box.append(results);
   }
 };
+
+let watchlistCache = [];
 
 $("#newGroup").onclick = async () => {
   draftSteps = [];
@@ -125,11 +112,9 @@ $("#newGroup").onclick = async () => {
   $("#stepExclude").value = "";
   $("#groupMsg").textContent = "";
   renderDraftSteps();
-  const items = live(await get("watchlist", []));
-  $("#stepItem").replaceChildren(...items.map(it =>
-    el("option", { value: `${it.provider}|${it.slug}`, textContent: it.title })));
-  $("#stepSearchProv").replaceChildren(...providers.map(p =>
-    el("option", { value: p.id, textContent: `${p.name || p.id} (${(p.language || "?").toUpperCase()})` })));
+  watchlistCache = live(await get("watchlist", []));
+  $("#stepItem").replaceChildren(...watchlistCache.map(it =>
+    el("option", { value: it.tmdb_id, textContent: it.title })));
   $("#stepSearchQ").value = "";
   $("#stepSearchResults").replaceChildren();
   importDraft = [];
@@ -137,7 +122,6 @@ $("#newGroup").onclick = async () => {
   $("#importAssign").hidden = true;
   $("#importResults").hidden = true;
   $("#importResults").replaceChildren();
-  $("#importProviderPick").replaceChildren(...providers.map(p => el("option", { value: p.id, textContent: p.name || p.id })));
   $("#groupForm").hidden = false;
 };
 

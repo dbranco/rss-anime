@@ -16,14 +16,14 @@ const avatarSel = new Map(); // id de grupo -> índice del título mostrado en e
 function titleColors(steps) {
   const map = new Map();
   for (const s of steps) {
-    const key = `${s.provider}|${s.slug}`;
+    const key = s.tmdb_id;
     if (!map.has(key)) map.set(key, PALETTE[map.size % PALETTE.length]);
   }
   return map;
 }
 
 function distinctTitles(g) {
-  return [...new Map(g.steps.map(s => [`${s.provider}|${s.slug}`, s])).values()];
+  return [...new Map(g.steps.map(s => [s.tmdb_id, s])).values()];
 }
 
 function avatarEl(title, color, isCur, image) {
@@ -44,17 +44,17 @@ function renderAvatars(g, cur, watchlist, onChange) {
   if (!distinct.length) return el("div", {});
   const colors = titleColors(g.steps);
   if (!avatarSel.has(g.id)) {
-    const curIdx = cur ? distinct.findIndex(s => s.provider === cur.step.provider && s.slug === cur.step.slug) : 0;
+    const curIdx = cur ? distinct.findIndex(s => s.tmdb_id === cur.step.tmdb_id) : 0;
     avatarSel.set(g.id, Math.max(0, curIdx));
   }
   const idx = Math.min(avatarSel.get(g.id), distinct.length - 1);
   const s = distinct[idx];
-  const it = watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
-  const isCur = !!cur && cur.step.provider === s.provider && cur.step.slug === s.slug;
+  const it = watchlist.find(w => w.tmdb_id === s.tmdb_id);
+  const isCur = !!cur && cur.step.tmdb_id === s.tmdb_id;
   const move = d => { avatarSel.set(g.id, (idx + d + distinct.length) % distinct.length); onChange(); };
   return el("div", { className: "avatars" },
     distinct.length > 1 ? btn("◀", () => move(-1)) : "",
-    avatarEl(it ? it.title : s.slug, colors.get(`${s.provider}|${s.slug}`), isCur, it?.image),
+    avatarEl(it ? it.title : s.tmdb_id, colors.get(s.tmdb_id), isCur, it?.image),
     distinct.length > 1 ? btn("▶", () => move(1)) : "");
 }
 
@@ -71,19 +71,19 @@ function renderItinerary(g, cur, watchlist, onChange) {
 
   const badges = items.slice(start, start + ITIN_PAGE_SIZE).map((e, i) => {
     const globalIdx = start + i;
-    const color = colors.get(`${e.step.provider}|${e.step.slug}`);
+    const color = colors.get(e.step.tmdb_id);
     const isSel = sel && sel.step === e.step && sel.episode === e.episode;
     const badge = el("span", {
       className: "ep" + (e.seen ? " seen" : "") + (globalIdx === curIdx ? " now" : "") + (isSel ? " selected" : ""),
       textContent: String(globalIdx + 1),
-      title: `Episodio ${e.episode} de ${e.item ? e.item.title : e.step.slug}`,
+      title: `Episodio ${e.episode} de ${e.item ? e.item.title : e.step.tmdb_id}`,
       style: `border-color:${color}` + (e.seen ? `;background:${color}` : "")
     });
     // Un toque selecciona/abre la tarjeta de acción; toca otra vez para cerrarla.
     // También cambia el carrusel de avatares al título de este episodio.
     badge.onclick = () => {
       itinSel.set(g.id, isSel ? null : { step: e.step, episode: e.episode, item: e.item, seen: e.seen });
-      const idx = distinctTitles(g).findIndex(s => s.provider === e.step.provider && s.slug === e.step.slug);
+      const idx = distinctTitles(g).findIndex(s => s.tmdb_id === e.step.tmdb_id);
       if (idx >= 0) avatarSel.set(g.id, idx);
       onChange();
     };
@@ -127,7 +127,7 @@ export function groupCard(g, watchlist, owned, onChange) {
     : el("div", {},
         el("div", { textContent:
           `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
-          `${cur.item ? cur.item.title : cur.step.slug} — episodio ${cur.next}` }),
+          `${cur.item ? cur.item.title : cur.step.tmdb_id} — episodio ${cur.next}` }),
         cur.item
           ? el("div", { className: "actions" },
               btn("Siguiente", async () => {
@@ -141,7 +141,7 @@ export function groupCard(g, watchlist, owned, onChange) {
               }),
               btn("Visto", () => onMark(cur.step, cur.next)))
           : el("div", { className: "st",
-              textContent: `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` }),
+              textContent: `⚠ ${cur.step.title || cur.step.tmdb_id} ya no está en tu lista` }),
         st);
   const missing = groups.missingSteps(g, watchlist);
   return el("div", { className: "card" },
