@@ -195,7 +195,16 @@ function renderItemEpisodePanel(item, episode, seen, onChange) {
       playerBox));
 }
 
-function itemCard(item) {
+// Nombres de los grupos (propios o suscritos) cuyo itinerario todavía usa este título.
+// Quitarlo de la lista rompería su seguimiento ahí (el paso deja de encontrar el ítem:
+// pierde avatar real y el botón "Visto" desaparece), así que "Quitar" lo bloquea si hay alguno.
+function groupsReferencing(item, myGroups, subGroups) {
+  return [...myGroups, ...subGroups]
+    .filter(g => (g.steps || []).some(s => s.provider === item.provider && s.slug === item.slug))
+    .map(g => g.name);
+}
+
+function itemCard(item, myGroups, subGroups) {
   const st = el("div", { className: "st" });
   const eps = el("div", { className: "itin" });
   const key = `${item.provider}|${item.slug}`;
@@ -229,7 +238,14 @@ function itemCard(item) {
           } catch (e) { eps.textContent = "Error: " + explain(e); }
         }),
         btn("Visto +1", () => markSeen(item)),
-        btn("Quitar", async () => { await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderMain(); sync(); })),
+        btn("Quitar", async () => {
+          const refs = groupsReferencing(item, myGroups, subGroups);
+          if (refs.length) {
+            msg(`No se puede quitar: lo usa el grupo "${refs[0]}"${refs.length > 1 ? ` y ${refs.length - 1} más` : ""}. Quita ese paso del grupo (o date de baja) primero.`);
+            return;
+          }
+          await mutate(item.provider, item.slug, x => { x.deleted = true; }); renderMain(); sync();
+        })),
       st, eps));
 }
 
@@ -479,7 +495,7 @@ async function renderMain() {
   const page = entries.slice(start, start + LIST_PAGE_SIZE);
 
   $("#list").replaceChildren(...(page.length
-    ? page.map(e => (e.kind === "item" ? itemCard(e.data) : groupCard(e.data, watchlist, e.owned)))
+    ? page.map(e => (e.kind === "item" ? itemCard(e.data, myGroups, subGroups) : groupCard(e.data, watchlist, e.owned)))
     : ["Nada que mostrar con este filtro."]));
   $("#listPager").replaceChildren(...(pages > 1
     ? [btn("◀", () => { listPage = Math.max(0, listPage - 1); renderMain(); }),
