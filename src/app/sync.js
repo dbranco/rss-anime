@@ -48,7 +48,7 @@ export async function signUp(email, password) {
 // se borra "session", los datos de la cuenta anterior (watchlist, grupos, suscripciones,
 // feed_token...) se quedan en el dispositivo y, al iniciar sesión con OTRA cuenta, el merge por
 // updated_at de syncWatchlist/syncGroups/syncSubscriptions los sube como si fueran suyos — fuga
-// real de datos entre cuentas, no solo un glitch visual. `providers`/`interval`/`supabase` no se
+// real de datos entre cuentas, no solo un glitch visual. `players`/`interval`/`supabase` no se
 // limpian: son config compartida de la app o del dispositivo, no datos de la cuenta.
 //
 // Claves de cuenta que se limpian al cerrar sesión — ver el comentario de signOut().
@@ -118,29 +118,29 @@ async function syncFeedToken(uid) {
   if (created?.feed_token) await set("feed_token", created.feed_token);
 }
 
-// providers es config de la app (no por usuario): todos hacen pull de app_config,
-// solo el admin (fila en `admins`) puede escribir con saveAppProviders().
+// players es config de la app (no por usuario): todos hacen pull de app_config,
+// solo el admin (fila en `admins`) puede escribir con saveAppPlayers().
 async function syncAppConfig(uid) {
-  const [row] = await rest("app_config?select=providers,updated_at&id=eq.1");
-  // Sin fila remota no pisamos nada: en una instalación nueva lo que hay en local es la
-  // semilla de providers.example.json (o el borrador del admin antes de guardar).
+  const [row] = await rest("app_config?select=players,tmdb_key,updated_at&id=eq.1");
   if (row) {
-    await set("providers", row.providers || []);
-    await set("providers_updated_at", row.updated_at || null);
+    await set("players", row.players || {});
+    await set("tmdb_key", row.tmdb_key || null);
+    await set("players_updated_at", row.updated_at || null);
   }
   const adminRows = await rest(`admins?select=user_id&user_id=eq.${uid}`);
   await set("is_admin", adminRows.length > 0);
 }
 
-export async function saveAppProviders(arr) {
+export async function saveAppPlayers(players, tmdbKey) {
   await session();
   const t = now();
   await rest("app_config?on_conflict=id", {
     method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
-    body: [{ id: 1, providers: arr, updated_at: t }]
+    body: [{ id: 1, players, tmdb_key: tmdbKey, updated_at: t }]
   });
-  await set("providers", arr);
-  await set("providers_updated_at", t);
+  await set("players", players);
+  await set("tmdb_key", tmdbKey);
+  await set("players_updated_at", t);
 }
 
 async function syncWatchlist(uid) {

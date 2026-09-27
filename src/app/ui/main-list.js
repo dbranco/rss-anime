@@ -4,7 +4,7 @@ import * as groups from "../groups.js";
 import { $, btn, el } from "./dom.js";
 import { itemCard } from "./list-item.js";
 import { groupCard } from "./group-card.js";
-import { setWatchlistCache, updatePermBanner } from "./permissions.js";
+import { updatePermBanner } from "./permissions.js";
 
 const LIST_PAGE_SIZE = 10;
 let listFilter = "both";
@@ -14,7 +14,6 @@ export function setListFilter(v) { listFilter = v; listPage = 0; }
 
 export async function renderMain() {
   const watchlist = live(await get("watchlist", []));
-  setWatchlistCache(watchlist); // mantiene el caché fresco: init, cada mutación y cada sync pasan por aquí
   const myGroups = groups.live(await get("groups", []));
   // La fuente de verdad de "estoy suscrito" es group_subscriptions; subscribed_groups es solo la
   // caché de solo lectura del grupo original. Iteramos las suscripciones vivas para que una cuyo

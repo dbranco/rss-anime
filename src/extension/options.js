@@ -1,13 +1,28 @@
 import { get, set } from "../app/store.js";
-import { signIn, signUp, signOut, getSession, saveAppProviders } from "../app/sync.js";
+import { signIn, signUp, signOut, getSession, saveAppPlayers } from "../app/sync.js";
 import { requestSync } from "./syncClient.js";
 
 const $ = s => document.querySelector(s);
 const status = (t, bad) => { const s = $("#status"); s.textContent = t; s.style.color = bad ? "#c33" : "#2a7"; };
 const sbMsg = (t, bad) => { const s = $("#sbStatus"); s.textContent = t; s.style.color = bad ? "#c33" : ""; };
 
-async function loadProviders() {
-  $("#json").value = JSON.stringify(await get("providers", []), null, 2);
+function validatePlayers(obj) {
+  if (typeof obj !== "object" || Array.isArray(obj)) throw new Error("Debe ser un objeto { idioma: { sub: [...], dub: [...] } }");
+  for (const [lang, tracks] of Object.entries(obj)) {
+    for (const track of ["sub", "dub"]) {
+      for (const entry of (tracks[track] || [])) {
+        if (!entry.id || !entry.rule) throw new Error(`Falta id/rule en ${lang}.${track}`);
+        for (const k of ["base_url", "search", "episode"]) if (!entry.rule[k]) throw new Error(`Falta rule.${k} en ${lang}.${track}.${entry.id}`);
+        if (!entry.rule.search.slug_regex) throw new Error(`Falta rule.search.slug_regex en ${lang}.${track}.${entry.id}`);
+        new URL(entry.rule.base_url);
+      }
+    }
+  }
+}
+
+async function loadConfig() {
+  $("#json").value = JSON.stringify(await get("players", {}), null, 2);
+  $("#tmdbKey").value = (await get("tmdb_key")) || "";
   $("#interval").value = await get("interval", 60);
   const admin = await get("is_admin", false);
   $("#providersSection").hidden = !admin;
@@ -28,7 +43,7 @@ async function renderSb() {
 }
 
 async function init() {
-  await loadProviders();
+  await loadConfig();
   const c = await get("supabase", {});
   $("#sbUrl").value = c.url || "";
   $("#sbKey").value = c.anonKey || "";
@@ -36,24 +51,25 @@ async function init() {
 }
 
 $("#save").onclick = () => {
-  let arr;
+  let players;
   try {
-    arr = JSON.parse($("#json").value);
-    if (!Array.isArray(arr)) throw new Error("Debe ser una lista [ ... ]");
-    for (const p of arr) {
-      for (const k of ["id", "base_url", "search", "episode"]) if (!p[k]) throw new Error(`Falta "${k}" en un provider`);
-      if (!p.search.slug_regex) throw new Error(`Falta search.slug_regex en "${p.id}"`);
-      new URL(p.base_url);
-    }
+    players = JSON.parse($("#json").value);
+    validatePlayers(players); // misma función que config.js — puedes duplicarla aquí, este archivo no comparte módulo con la PWA
   } catch (e) { return status("JSON no válido: " + e.message, true); }
 
-  // Debe llamarse directamente desde el clic (gesto del usuario)
-  const origins = [...new Set(arr.map(p => { const u = new URL(p.base_url); return `${u.protocol}//${u.hostname}/*`; }))];
+  const origins = [...new Set(
+    Object.values(players).flatMap(tracks =>
+      ["sub", "dub"].flatMap(t => (tracks[t] || []).map(entry => {
+        const u = new URL(entry.rule.base_url);
+        return `${u.protocol}//${u.hostname}/*`;
+      }))
+    )
+  )];
   chrome.permissions.request({ origins }).then(async granted => {
-    try { await saveAppProviders(arr); }
+    try { await saveAppPlayers(players, $("#tmdbKey").value.trim() || null); }
     catch (e) { return status("Error al guardar: " + e.message, true); }
     status(granted ? "Guardado y permisos concedidos." : "Guardado, pero SIN permiso a los dominios: las búsquedas fallarán.", !granted);
-    await loadProviders();
+    await loadConfig();
   });
 };
 
@@ -82,7 +98,7 @@ async function authFlow(fn) {
     await saveCfg();
     var note = await fn(email, password);
   } catch (e) { return sbMsg("Error: " + e.message, true); }
-  await loadProviders();
+  await loadConfig();
   await renderSb();
   if (note) sbMsg(note);
 }
@@ -95,7 +111,7 @@ $("#signup").onclick = () => authFlow(async (email, password) => {
 });
 $("#logout").onclick = async () => { await signOut(); renderSb(); };
 $("#syncnow").onclick = async () => {
-  try { await saveCfg(); await requestSync(); await loadProviders(); await renderSb(); sbMsg("Sincronizado"); }
+  try { await saveCfg(); await requestSync(); await loadConfig(); await renderSb(); sbMsg("Sincronizado"); }
   catch (e) { sbMsg("Error: " + e.message, true); }
 };
 

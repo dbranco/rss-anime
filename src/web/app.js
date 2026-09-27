@@ -3,7 +3,6 @@ import { get, set } from "../app/store.js";
 import { signIn, signUp, signOut, getSession } from "../app/sync.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { $, explain } from "../app/ui/dom.js";
-import { fillProviders } from "../app/ui/state.js";
 import { requestSync } from "../app/ui/sync.js";
 import { renderMain, setListFilter } from "../app/ui/main-list.js";
 import { renderConfig } from "./ui/config.js";
@@ -48,7 +47,7 @@ async function sync(quiet = true) {
   try {
     await requestSync();
     $("#cloud").textContent = "✓";
-    await fillProviders(); await renderMain(); await renderFeed();
+    await renderMain(); await renderFeed();
     await applyAdminVisibility();
   } catch (e) {
     $("#cloud").textContent = "⚠";
@@ -61,7 +60,7 @@ async function showMain() {
   $("#authView").hidden = true;
   $("#mainView").hidden = false;
   $("#who").textContent = s.user.email;
-  await fillProviders(); await renderMain(); await renderFeed();
+  await renderMain(); await renderFeed();
   sync();
 }
 

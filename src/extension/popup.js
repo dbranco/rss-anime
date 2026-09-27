@@ -1,6 +1,5 @@
 import { getSession } from "../app/sync.js";
 import { $, explain } from "../app/ui/dom.js";
-import { fillProviders } from "../app/ui/state.js";
 import { ensurePermissions } from "../app/ui/permissions.js";
 import { requestSync } from "../app/ui/sync.js";
 import { renderMain, setListFilter } from "../app/ui/main-list.js";
@@ -34,7 +33,6 @@ async function sync(quiet = true) {
   try {
     await requestSync();
     $("#cloud").textContent = "✓";
-    await fillProviders();
     if (!$("#allView").hidden) renderMain();
     if (!quiet) msg("Sincronizado");
   } catch (e) {
@@ -49,12 +47,11 @@ $("#sync").onclick = () => sync(false);
 $("#all").onclick = async () => {
   await ensurePermissions();
   msg("Sincronizando y comprobando en segundo plano…");
-  try { await chrome.runtime.sendMessage({ type: "checkNow" }); await fillProviders(); renderMain(); msg("Listo"); }
+  try { await chrome.runtime.sendMessage({ type: "checkNow" }); renderMain(); msg("Listo"); }
   catch (e) { msg("Error: " + e.message); }
 };
 
 async function init() {
-  await fillProviders();
   renderNews();
   renderMain();
   sync();
