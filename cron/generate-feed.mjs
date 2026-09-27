@@ -10,8 +10,8 @@ import path from "node:path";
 import { JSDOM } from "jsdom";
 
 globalThis.DOMParser = new JSDOM("").window.DOMParser; // el motor necesita DOMParser
-const engine = await import("../extension/engine.js");
-const { currentStep } = await import("../extension/groups.js");
+const engine = await import("../src/app/engine.js");
+const { currentStep } = await import("../src/app/groups.js");
 
 const BASE = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const KEY = process.env.SUPABASE_SERVICE_KEY;

@@ -1,4 +1,4 @@
-import { search, episodes, checkEpisode } from "./engine.js";
+import { search, episodes, checkEpisode } from "../app/engine.js";
 const ops = { search, episodes, checkEpisode };
 
 chrome.runtime.onMessage.addListener((m, _sender, send) => {

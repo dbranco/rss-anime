@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { JSDOM } from "jsdom";
 globalThis.DOMParser = new JSDOM("").window.DOMParser;
-const { nextNeeded, currentStep, itinerary } = await import("../extension/groups.js");
+const { nextNeeded, currentStep, itinerary } = await import("../src/app/groups.js");
 
 // nextNeeded: caso simple
 assert.equal(nextNeeded({ from: 1, to: 5, exclude: [] }, 0), 1);
@@ -80,10 +80,10 @@ globalThis.chrome = { storage: { local: {
   get: async k => (k in data ? { [k]: structuredClone(data[k]) } : {}),
   set: async o => { Object.assign(data, structuredClone(o)); }
 } } };
-const { get, set } = await import("../extension/store.js");
-const { add, live } = await import("../extension/list.js");
+const { get, set } = await import("../src/app/store.js");
+const { add, live } = await import("../src/app/list.js");
 const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, unmarkFrom, live: liveGroups } =
-  await import("../extension/groups.js");
+  await import("../src/app/groups.js");
 
 const g = await addGroup("Star Wars cronológico");
 assert.equal(liveGroups(await get("groups", [])).length, 1);
@@ -137,7 +137,7 @@ console.log("unmarkFrom OK");
 
 // --- missingSteps / repairGroup / setPublic / subscribe / unsubscribe ---
 const { missingSteps, repairGroup, setPublic, subscribe, unsubscribe, liveSubscriptions } =
-  await import("../extension/groups.js");
+  await import("../src/app/groups.js");
 
 const g3 = await addGroup("Grupo con huecos");
 await addStep(g3.id, { provider: "p", slug: "serie" }); // ya está en watchlist (se añadió arriba)

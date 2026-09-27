@@ -1,6 +1,6 @@
 // Registra el gancho que engine.js usa cuando no puede hacer fetch directo a un provider
 // (CORS, ver README de web/). Pasa por la Edge Function "proxy", protegida por el JWT de la sesión.
-import { get } from "../extension/store.js";
+import { get } from "../app/store.js";
 
 globalThis.__seriesTrackerFetch = async url => {
   const cfg = await get("supabase");

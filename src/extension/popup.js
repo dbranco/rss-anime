@@ -1,4 +1,4 @@
-import { getSession } from "./sync.js";
+import { getSession } from "../app/sync.js";
 import { $, msg, explain } from "./ui/dom.js";
 import { fillProviders } from "./ui/state.js";
 import { ensurePermissions } from "./ui/permissions.js";

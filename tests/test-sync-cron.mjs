@@ -15,10 +15,10 @@ const machine = () => { // chrome.storage.local falso: una "máquina"
 const A = machine(), B = machine();
 const use = m => { globalThis.chrome = m; };
 
-const { get, set } = await import("../extension/store.js");
+const { get, set } = await import("../src/app/store.js");
 const { signUp, signIn, signOut, syncNow, saveAppProviders, searchPublicGroups, rateGroup, ACCOUNT_KEYS } =
-  await import("../extension/sync.js");
-const { add, mutate, live } = await import("../extension/list.js");
+  await import("../src/app/sync.js");
+const { add, mutate, live } = await import("../src/app/list.js");
 const providers = JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8"));
 
 // Da de alta a un usuario como admin usando la service key (bypassa RLS, igual que hace
@@ -40,7 +40,7 @@ await syncNow();
 console.log("A (admin) subió providers y lista");
 
 // A crea un grupo con un paso
-const { addGroup, addStep, live: liveGroups } = await import("../extension/groups.js");
+const { addGroup, addStep, live: liveGroups } = await import("../src/app/groups.js");
 const grupo = await addGroup("Mi maratón");
 await addStep(grupo.id, { provider: "mock", slug: "re-zero", from: 1, to: 3 });
 await syncNow();
@@ -83,7 +83,7 @@ console.log("borrado y restauración propagados");
 
 // B renombra el grupo → A lo recibe; luego A lo borra → B lo ve borrado
 use(B);
-const { renameGroup, removeGroup } = await import("../extension/groups.js");
+const { renameGroup, removeGroup } = await import("../src/app/groups.js");
 await renameGroup(grupo.id, "Maratón definitivo");
 await syncNow();
 use(A); await syncNow();
@@ -116,7 +116,7 @@ console.log("cron OK:", count(xml), "items; feed en la URL del feed_token");
 // sigue siendo válido: longrun todavía no existe en ese punto).
 use(A);
 await add({ provider: "mock", slug: "longrun", title: "Long Run", link: "x", image: null });
-const { addGroup: addGroup2, addStep: addStep2 } = await import("../extension/groups.js");
+const { addGroup: addGroup2, addStep: addStep2 } = await import("../src/app/groups.js");
 const gLong = await addGroup2("Maratón larga");
 await addStep2(gLong.id, { provider: "mock", slug: "longrun", from: 20, to: 20 });
 await syncNow();
@@ -162,7 +162,7 @@ console.log("C (no admin) también recibe episodios nuevos vía los providers co
 // sola su lista), marca progreso propio SIN tocar el de A, lo valora, y el cron le
 // resuelve episodios nuevos de ese grupo suscrito en SU PROPIO feed.
 use(A);
-const { setPublic } = await import("../extension/groups.js");
+const { setPublic } = await import("../src/app/groups.js");
 await setPublic(gLong.id, true); // "Maratón larga" (longrun, del bloque anterior)
 // Segundo grupo público con un nombre claramente distinto: sin él, "buscar 'Maratón' devuelve 1"
 // no distinguía "el filtro ilike funciona" de "el mock lo ignora y devuelve el único público".
@@ -181,7 +181,7 @@ assert.equal(found2.length, 1, "ilike filtra de verdad: 'Maratón' no arrastra '
 assert.equal(found2[0].name, "Maratón larga");
 assert.equal((await searchPublicGroups("Fate")).map(g => g.name).join(), "Saga Fate");
 
-const { subscribe, currentStep: curStepC, markUpTo } = await import("../extension/groups.js");
+const { subscribe, currentStep: curStepC, markUpTo } = await import("../src/app/groups.js");
 await subscribe(found2[0], live(await get("watchlist", [])));
 assert.ok(live(await get("watchlist", [])).find(w => w.provider === "mock" && w.slug === "longrun"),
   "suscribirse repara sola la lista de C para el paso de 'longrun'");
@@ -212,7 +212,7 @@ console.log("grupo público: descubrir, suscribirse (con auto-reparación), prog
 // lectura ni el cron vuelven a traer nada de él. El paso nuevo es el 30 de 'longrun', fuera de la
 // ventana MAX_AHEAD (C va por el 20), así que solo puede llegar al feed de C vía el grupo suscrito
 // — es lo que hace que estas dos aserciones distingan el filtro de un no-op.
-const { liveSubscriptions } = await import("../extension/groups.js");
+const { liveSubscriptions } = await import("../src/app/groups.js");
 use(A);
 await setPublic(gLong.id, false);
 await addStep2(gLong.id, { provider: "mock", slug: "longrun", from: 30, to: 30 });

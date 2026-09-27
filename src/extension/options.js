@@ -1,5 +1,5 @@
-import { get, set } from "./store.js";
-import { signIn, signUp, signOut, getSession, saveAppProviders } from "./sync.js";
+import { get, set } from "../app/store.js";
+import { signIn, signUp, signOut, getSession, saveAppProviders } from "../app/sync.js";
 import { requestSync } from "./syncClient.js";
 
 const $ = s => document.querySelector(s);

@@ -1,10 +1,10 @@
 # Series Tracker
 
-Tres piezas que comparten el mismo motor de scraping (`extension/engine.js`):
+Tres piezas que comparten el mismo motor de scraping (`src/app/engine.js`):
 
 | Pieza | Para qué |
 |---|---|
-| `extension/` | Extensión Chromium (MV3): buscas, guardas series, ves episodios y recibes notificaciones |
+| `src/extension/` | Extensión Chromium (MV3): buscas, guardas series, ves episodios y recibes notificaciones |
 | `supabase/schema.sql` | Tablas + RLS: lista y grupos por usuario, providers compartidos por toda la app |
 | `cron/generate-feed.mjs` | Revisa la lista de cada usuario en Supabase y publica su feed RSS |
 
@@ -21,7 +21,7 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 4. Settings → API: copia la URL, la clave `anon` (va en la extensión) y la `service_role` (SOLO para el cron).
 
 ## 2. Extensión
-1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `extension/`.
+1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `src/extension/`.
 2. Solo la cuenta admin edita providers (⚙ Opciones en la extensión, o Config en la PWA): pega
    el JSON y guarda (acepta el permiso del dominio). El resto de cuentas los reciben ya listos
    al sincronizar — ver "Providers como config de la app" más abajo.

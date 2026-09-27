@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import fs from "node:fs";
 globalThis.DOMParser = new JSDOM("").window.DOMParser;
-const engine = await import("../extension/engine.js");
+const engine = await import("../src/app/engine.js");
 const [p] = JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8"));
 const [pMirror] = JSON.parse(fs.readFileSync(new URL("./mock-provider-mirror.json", import.meta.url), "utf8"));
 

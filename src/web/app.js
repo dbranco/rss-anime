@@ -1,6 +1,6 @@
 import "./proxy.js"; // registra globalThis.__seriesTrackerFetch antes de usar engine.js
-import { get, set } from "../extension/store.js";
-import { signIn, signUp, signOut, getSession } from "../extension/sync.js";
+import { get, set } from "../app/store.js";
+import { signIn, signUp, signOut, getSession } from "../app/sync.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { $, explain } from "./ui/dom.js";
 import { fillProviders } from "./ui/state.js";

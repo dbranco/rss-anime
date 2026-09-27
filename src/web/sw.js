@@ -4,7 +4,7 @@
 const CACHE = "series-tracker-shell-v2";
 const SHELL = [
   "./", "./index.html", "./app.js", "./proxy.js", "./config.js", "./style.css", "./manifest.webmanifest",
-  "../extension/engine.js", "../extension/list.js", "../extension/sync.js", "../extension/store.js"
+  "../app/engine.js", "../app/list.js", "../app/sync.js", "../app/store.js"
 ];
 
 self.addEventListener("install", e => {

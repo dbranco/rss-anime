@@ -1,7 +1,7 @@
-import { get, set } from "./store.js";
-import { live } from "./list.js";
-import { live as liveGroups, currentStep } from "./groups.js";
-import { syncNow, getSession } from "./sync.js";
+import { get, set } from "../app/store.js";
+import { live } from "../app/list.js";
+import { live as liveGroups, currentStep } from "../app/groups.js";
+import { syncNow, getSession } from "../app/sync.js";
 
 const ALARM = "check";
 const MAX_AHEAD = 5;
