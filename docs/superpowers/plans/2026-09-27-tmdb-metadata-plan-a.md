@@ -366,6 +366,7 @@ import * as tmdb from "../tmdb.js";
 import { add } from "../list.js";
 import { $, el, btn, safe, explain } from "./dom.js";
 import { get } from "../store.js";
+import { ensurePermissions } from "./permissions.js";
 import { requestSync } from "./sync.js";
 import { renderMain } from "./main-list.js";
 
@@ -374,6 +375,7 @@ $("#go").onclick = async () => {
   $("#searchMsg").textContent = "";
   if (!q) { $("#searchMsg").textContent = "Escribe algo para buscar."; return; }
   $("#searchMsg").textContent = "Buscando…";
+  await ensurePermissions(); // incluye api.themoviedb.org — ver permissions.js (Task 5)
   const lang = await get("lang_pref", "es-ES");
   let results;
   try { results = await tmdb.search(q, lang); }
@@ -413,14 +415,22 @@ dupliques el import.)
 - [ ] **Step 4: Actualizar llamadas a mutate en src/app/ui/list-item.js**
 
 Cambia toda ocurrencia de `mutate(item.provider, item.slug, x => {...})`
-a `mutate(item.tmdb_id, x => {...})` — son 4 call sites: "Siguiente"
-(no, ese usa `engine.checkEpisode` directo, no `mutate` — no tocar),
-"Visto +1", "Ocultar", "Quitar". También cambia `item.image` →
+a `mutate(item.tmdb_id, x => {...})` — 3 call sites: "Visto +1",
+"Ocultar", "Quitar". También cambia `item.image` →
 `tmdb.posterUrl(item.poster_path)` donde se construye el `<img>` de la
 tarjeta, y el `key` de `epsSel` de `` `${item.provider}|${item.slug}` ``
 a `` `${item.tmdb_id}` ``. La reescritura completa de "Episodios" (que
 hoy llama `engine.episodes`) es Task 7, no toques esa parte aquí más allá
 de actualizar la clave del Map.
+
+**No toques el botón "Siguiente"** (llama `engine.checkEpisode(prov(item.provider), item.slug, n)`
+directo, sin pasar por `mutate`) — entre este task y Task 7 (que lo
+elimina) queda con una referencia rota a `item.provider`/`item.slug`
+inexistentes. Es intencional y transitorio: no lo arregles aquí, no lo
+elimines aquí tampoco (eso es exactamente lo que hace Task 7). Si el
+revisor de este task nota que "Siguiente" reventaría en el navegador en
+este punto, es un hallazgo esperado, no una regresión de este task — está
+documentado aquí y en el brief de Task 7.
 
 - [ ] **Step 5: Actualizar src/app/sync.js**
 
@@ -665,6 +675,7 @@ import { get } from "../store.js";
 import { live, add } from "../list.js";
 import * as groups from "../groups.js";
 import { $, el, btn, explain } from "./dom.js";
+import { ensurePermissions } from "./permissions.js";
 import { requestSync } from "./sync.js";
 import { renderMain } from "./main-list.js";
 
@@ -699,6 +710,7 @@ $("#addStepBtn").onclick = () => {
 // Búsqueda de TMDB reutilizable tanto para "añadir un paso nuevo" como para el asistente de
 // import — un paso siempre referencia un tmdb_id, nunca un sitio de reproducción concreto.
 async function searchAndPick(query, onPick) {
+  await ensurePermissions(); // incluye api.themoviedb.org — ver permissions.js (Task 5)
   const lang = await get("lang_pref", "es-ES");
   const box = el("div", { textContent: "Buscando…" });
   try {
@@ -806,31 +818,49 @@ título (`#importProviderPick`, `#importApplyBtn` y su fila) ya no se
 usan — elimínalos del HTML de ambas apps (deja `#stepSearchQ`/
 `#stepSearchBtn`/`#stepSearchResults` intactos, siguen usándose).
 
-- [ ] **Step 3: Actualizar src/app/ui/group-card.js y src/app/ui/episode-panel.js**
+- [ ] **Step 3: Actualizar src/app/ui/group-card.js**
 
 Todo `step.provider`/`step.slug` pasa a `step.tmdb_id`; toda llamada a
 `groups.markUpTo(step, episode)`/`unmarkFrom` no cambia de firma (siguen
 recibiendo el `step` completo) pero ahora ese `step` trae `tmdb_id` en vez
-de `provider`/`slug` — sin más cambios en estos dos archivos más allá de
-donde construyen texto a partir de esos campos (ej. el mensaje de
+de `provider`/`slug` — sin más cambios en este archivo más allá de donde
+construye texto a partir de esos campos: el mensaje
 `⚠ ${cur.step.provider}/${cur.step.slug} ya no está en tu lista` pasa a
-`⚠ ${cur.step.title || cur.step.tmdb_id} ya no está en tu lista`).
+`⚠ ${cur.step.title || cur.step.tmdb_id} ya no está en tu lista`.
+
+**No toques el botón "Siguiente" de este archivo tampoco** (dentro de
+`body`, llama `engine.checkEpisode(prov(cur.step.provider), cur.step.slug, cur.next)`
+directo) — mismo caso que el "Siguiente" de `list-item.js`: queda con una
+referencia rota a `cur.step.provider`/`.slug` hasta que Task 7 lo elimina
+(Task 7 ahora cubre AMBOS botones "Siguiente", no solo el de
+`list-item.js` — ver su Step 1). Transitorio e intencional, no lo
+arregles ni lo elimines aquí.
+
+**No toques `src/app/ui/episode-panel.js` en este task** — su función
+`renderEpisodePanel` (la que usa `renderItinerary` de este mismo
+`group-card.js`) depende de `prov()` (eliminado en Task 5) y de
+`sel.step.provider`/`.slug` para calcular tanto el título como la URL
+"Abrir", no solo para el botón "▶ Ver aquí" — es una reescritura más
+grande que "cambiar el texto de un mensaje", y depende de `resolveAndPlay`
+que Task 6 todavía no existe en este punto. Se cubre completa en el
+Step 2 de Task 6, no aquí — tocarlo ahora dejaría el archivo en un estado
+a medias entre dos tasks.
 
 - [ ] **Step 4: Verificar**
 
 ```bash
-node --check src/app/groups.js src/app/ui/group-builder.js src/app/ui/group-card.js src/app/ui/episode-panel.js
-npm test
+node --check src/app/groups.js src/app/ui/group-builder.js src/app/ui/group-card.js
 ```
-`npm test` debe volver a verde aquí (los tests fallarán hasta que se
-actualicen — eso es Task 9; si prefieres, corre esta verificación después
-de Task 9 y trátala como no bloqueante en este punto, dejándolo anotado
-en el commit).
+`npm test` sigue sin volver a verde en este punto — el test suite todavía
+asume la firma vieja en varios sitios, y `episode-panel.js` sigue
+importando `prov` de `state.js` (que Task 5 aún no ha eliminado). Eso es
+esperado hasta Task 9, no una regresión de este task; no lo corras como
+gate aquí.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/app/groups.js src/app/ui/group-builder.js src/app/ui/group-card.js src/app/ui/episode-panel.js src/web/index.html src/extension/popup.html
+git add src/app/groups.js src/app/ui/group-builder.js src/app/ui/group-card.js src/web/index.html src/extension/popup.html
 git commit -m "feat: identidad tmdb_id en groups.js, simplifica group-builder.js (TMDB reemplaza búsqueda por provider)"
 ```
 
@@ -974,6 +1004,16 @@ que quede colgando en otros archivos ya tocados (`search.js`,
 `group-builder.js` ya no los importan tras Tasks 3-4; revisa
 `main-list.js`, `explore.js` por si acaso — no deberían tener ninguno).
 
+**Actualiza también los entry points** — `src/extension/popup.js` y
+`src/web/app.js` importan `fillProviders` de `./ui/state.js` y lo llaman
+en `init()` y dentro de su propio `sync()`; ambas llamadas (y el import)
+se eliminan sin reemplazo — no hace falta "precargar" nada para TMDB, cada
+sitio que necesita `lang_pref` lo lee bajo demanda con `get()`.
+
+**Y el HTML muerto**: `<div id="langFilter">` en `src/web/index.html` y
+`src/extension/popup.html` ya no lo llena nadie (era
+`renderLangFilter`) — elimínalo de ambos.
+
 - [ ] **Step 5: Actualizar src/app/ui/permissions.js**
 
 `watchlistOrigins`/`ensurePermissions` ya no reciben `extraIds` que se
@@ -984,12 +1024,20 @@ sitio, de momento simplifica a que `ensurePermissions` siempre pida
 permiso para TODOS los `base_url` presentes en `players` completo, sin
 intentar acotar por lo que ya está en uso):
 
+TMDB mismo (`api.themoviedb.org`) también necesita permiso explícito en
+la extensión — no está cubierto por defecto (`optional_host_permissions`
+en `manifest.json` es un comodín que hay que pedir concediendo un origen
+concreto, no algo ya otorgado). Se incluye siempre en `allOrigins()`,
+junto a los `base_url` de `players`:
+
 ```js
 import { $ } from "./dom.js";
 import { get } from "../store.js";
 
+const TMDB_ORIGIN = "https://api.themoviedb.org/*";
+
 function allOrigins(players) {
-  const set = new Set();
+  const set = new Set([TMDB_ORIGIN]);
   for (const tracks of Object.values(players || {})) {
     for (const t of ["sub", "dub"]) {
       for (const entry of (tracks[t] || [])) {
@@ -1032,7 +1080,8 @@ llamada.
 - [ ] **Step 6: Verificar**
 
 ```bash
-node --check src/app/sync.js src/web/ui/config.js src/extension/options.js src/app/ui/state.js src/app/ui/permissions.js src/app/ui/main-list.js
+node --check src/app/sync.js src/web/ui/config.js src/extension/options.js src/app/ui/state.js src/app/ui/permissions.js src/app/ui/main-list.js src/extension/popup.js src/web/app.js
+grep -n "fillProviders" src/extension/popup.js src/web/app.js  # no debe quedar ninguna ocurrencia
 ```
 
 - [ ] **Step 7: Commit**
@@ -1122,23 +1171,56 @@ export async function resolveAndPlay(item, episode, playerBox) {
 }
 ```
 
-- [ ] **Step 2: Conectar en src/app/ui/episode-panel.js**
+- [ ] **Step 2: Reescribir src/app/ui/episode-panel.js**
 
-Reemplaza el cuerpo del botón "▶ Ver aquí" en `renderItemEpisodePanel` y
-`renderEpisodePanel` (los dos tienen el mismo patrón hoy, llamando
-`engine.episodePlayers(p, slug, episode)` contra un `p`/slug fijos de
-`item.provider`/`item.slug` que ya no existen):
+Las dos funciones de este archivo calculan hoy `title`/`url` a partir de
+`prov(item.provider)`/`prov(sel.step.provider)` — `prov()` ya no existe
+(Task 5 la eliminó de `state.js`) y ni `item` ni `step` tienen ya
+`provider`/`slug`. No es solo el botón "▶ Ver aquí" el que cambia — todo
+el cálculo previo a él también depende de esos campos muertos. El enlace
+directo "Abrir" (que necesitaba una URL síncrona) se elimina: con
+resolución perezosa no hay ninguna URL disponible hasta que se resuelve
+un sitio, así que "▶ Ver aquí" pasa a ser la única forma de llegar al
+episodio.
 
 ```js
-        p ? btn("▶ Ver aquí", () => resolveAndPlay(item, episode, playerBox)) : "",
-```
+import { mutate } from "../list.js";
+import * as groups from "../groups.js";
+import { el, btn } from "./dom.js";
+import { resolveAndPlay } from "./resolve.js";
 
-Como `resolveAndPlay` ya no depende de `prov(item.provider)` para decidir
-si mostrar el botón (siempre se muestra — la propia función informa si no
-hay nada configurado), quita la variable `p`/`prov(...)` de ambas
-funciones y el `p ?` condicional: el botón siempre está. Importa
-`resolveAndPlay` desde `./resolve.js` en vez de `renderPlayerPicker`
-directo (ese import se mueve dentro de `resolve.js`).
+// Panel de acción de un episodio de una media suelta (no de grupo): marcar/desmarcar visto,
+// o verlo aquí con un servidor embebible (resolución perezosa, ver resolve.js).
+export function renderItemEpisodePanel(item, episode, seen, onChange) {
+  const playerBox = el("div", {});
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: `${item.title} — episodio ${episode}` }),
+      el("div", { className: "actions" },
+        seen
+          ? btn("Desmarcar", async () => { await mutate(item.tmdb_id, x => { x.last = Math.min(x.last || 0, episode - 1); }); onChange(); })
+          : btn("Marcar visto", async () => { await mutate(item.tmdb_id, x => { x.last = Math.max(x.last || 0, episode); }); onChange(); }),
+        btn("▶ Ver aquí", () => resolveAndPlay(item, episode, playerBox)),
+        btn("Cerrar", () => onChange(true))),
+      playerBox));
+}
+
+// Igual que arriba, pero para el episodio seleccionado del itinerario de un grupo.
+export function renderEpisodePanel(sel, onChange) {
+  const playerBox = el("div", {});
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: `${sel.item ? sel.item.title : sel.step.title} — episodio ${sel.episode}` }),
+      el("div", { className: "actions" },
+        sel.seen
+          ? btn("Desmarcar", async () => { await groups.unmarkFrom(sel.step, sel.episode); onChange(true); })
+          : btn("Marcar visto", async () => { await groups.markUpTo(sel.step, sel.episode); onChange(true); }),
+        // Sin item (el paso apunta a algo que ya no está en watchlist) no hay nada que resolver.
+        sel.item ? btn("▶ Ver aquí", () => resolveAndPlay(sel.item, sel.episode, playerBox)) : "",
+        btn("Cerrar", () => onChange(true))),
+      playerBox));
+}
+```
 
 - [ ] **Step 3: Verificar**
 
@@ -1158,7 +1240,8 @@ git commit -m "feat: resolución básica de reproducción (un sitio, resuelto pe
 ### Task 7: Lista de episodios vía TMDB
 
 **Files:**
-- Modify: `src/app/ui/list-item.js` (botón "Episodios")
+- Modify: `src/app/ui/list-item.js` (botón "Episodios", quita "Siguiente")
+- Modify: `src/app/ui/group-card.js` (quita "Siguiente")
 - Modify: `src/app/engine.js` (elimina `episodes()`, ya no se usa)
 
 **Interfaces:**
@@ -1210,30 +1293,37 @@ comentario). Para `media_type === "movie"` no hay episodios: muestra un
 Importa `* as tmdb from "../tmdb.js"` y `get` de `../store.js` al inicio
 del archivo (junto a los imports ya existentes).
 
-También quita el botón "Siguiente" (`engine.checkEpisode` contra
-`item.provider`/`item.slug`, que ya no existe como concepto fijo por
-ítem) — con reproducción multi-sitio no hay "el" provider de un ítem
-para comprobar. Su reemplazo (comprobar disponibilidad real contra un
-sitio ya resuelto) es Task 8/Plan B, no Plan A.
+También quita el botón "Siguiente" de este archivo (`engine.checkEpisode`
+contra `item.provider`/`item.slug`, que ya no existe como concepto fijo
+por ítem) — con reproducción multi-sitio no hay "el" provider de un ítem
+para comprobar. Un chequeo real contra un sitio ya resuelto es parte del
+chequeo híbrido de Plan B, no de este plan.
 
-- [ ] **Step 2: Eliminar engine.episodes() de src/app/engine.js**
+- [ ] **Step 2: Quitar el botón "Siguiente" de src/app/ui/group-card.js**
+
+Mismo caso, mismo motivo — dentro de `body`, el bloque
+`btn("Siguiente", async () => { const p = prov(cur.step.provider); ... engine.checkEpisode(p, cur.step.slug, cur.next) ...})`
+se elimina por completo (deja solo el botón "Visto" en esas acciones).
+
+- [ ] **Step 3: Eliminar engine.episodes() de src/app/engine.js**
 
 Nada llama a esta función tras el paso anterior — bórrala junto con el
 comentario que la describe. `series` deja de ser un campo que `engine.js`
 interprete (los `rule` de `app_config.players` ya no necesitan
 declararlo — Task 5's `validatePlayers` no lo exige, confírmalo).
 
-- [ ] **Step 3: Verificar**
+- [ ] **Step 4: Verificar**
 
 ```bash
-node --check src/app/ui/list-item.js src/app/engine.js
-grep -rn "engine.episodes\|\.series\b" src/app src/web src/extension  # no debe quedar ningún uso
+node --check src/app/ui/list-item.js src/app/ui/group-card.js src/app/engine.js
+grep -rn "engine\.episodes\|\.series\b" src/app src/web src/extension  # no debe quedar ningún uso
+grep -rn "\bprov(" src/app src/web src/extension  # no debe quedar ninguno — confirma que Task 5 y este task cubrieron todos los call sites
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/app/ui/list-item.js src/app/engine.js
+git add src/app/ui/list-item.js src/app/ui/group-card.js src/app/engine.js
 git commit -m "feat: lista de episodios vía TMDB, quita engine.episodes() y el botón Siguiente por ítem"
 ```
 
