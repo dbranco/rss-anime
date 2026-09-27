@@ -25,3 +25,6 @@ export async function renderLangFilter() {
 }
 
 export const selectedLangs = () => [...$("#langFilter").querySelectorAll("input:checked")].map(c => c.dataset.lang);
+
+export async function getLangPref() { return get("lang_pref", "es-ES"); }
+export async function setLangPref(lang) { return set("lang_pref", lang); }

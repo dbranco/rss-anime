@@ -1,4 +1,5 @@
 import * as engine from "../engine.js";
+import * as tmdb from "../tmdb.js";
 import { get, set } from "../store.js";
 import { mutate } from "../list.js";
 import { el, link, btn, safe, explain } from "./dom.js";
@@ -21,9 +22,9 @@ function groupsReferencing(item, myGroups, subGroups) {
 export function itemCard(item, myGroups, subGroups, onChange) {
   const st = el("div", { className: "st" });
   const eps = el("div", { className: "itin" });
-  const key = `${item.provider}|${item.slug}`;
+  const key = `${item.tmdb_id}`;
   return el("div", { className: "card" },
-    item.image ? el("img", { src: safe(item.image) }) : "",
+    item.poster_path ? el("img", { src: safe(tmdb.posterUrl(item.poster_path)) }) : "",
     el("div", { className: "body" },
       el("b", { textContent: item.title }),
       el("div", { className: "st", textContent: "Visto hasta el episodio " + (item.last || 0) }),
@@ -64,7 +65,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
           } catch (e) { eps.textContent = "Error: " + explain(e); }
         }),
         btn("Visto +1", async () => {
-          const it = await mutate(item.provider, item.slug, x => { x.last = (x.last || 0) + 1; });
+          const it = await mutate(item.tmdb_id, x => { x.last = (x.last || 0) + 1; });
           if (it) {
             const news = await get("news", []);
             await set("news", news.filter(n => !(n.provider === it.provider && n.slug === it.slug && n.episode <= it.last)));
@@ -74,7 +75,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
         btn("Ocultar", async () => {
           // A diferencia de Quitar, esconder no borra nada ni rompe el seguimiento de ningún
           // grupo: el ítem sigue en watchlist, solo deja de mostrarse como tarjeta suelta.
-          await mutate(item.provider, item.slug, x => { x.visible = false; });
+          await mutate(item.tmdb_id, x => { x.visible = false; });
           onChange(); requestSync();
         }),
         btn("Quitar", async () => {
@@ -83,7 +84,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
             st.textContent = `No se puede quitar: lo usa el grupo "${refs[0]}"${refs.length > 1 ? ` y ${refs.length - 1} más` : ""}. Quita ese paso del grupo (o date de baja) primero.`;
             return;
           }
-          await mutate(item.provider, item.slug, x => { x.deleted = true; }); onChange(); requestSync();
+          await mutate(item.tmdb_id, x => { x.deleted = true; }); onChange(); requestSync();
         })),
       st, eps));
 }

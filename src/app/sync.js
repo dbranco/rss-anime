@@ -145,12 +145,13 @@ export async function saveAppProviders(arr) {
 
 async function syncWatchlist(uid) {
   const remote = (await rest(`watchlist?select=*&user_id=eq.${uid}`)).map(r => ({
-    provider: r.provider_id, slug: r.slug, title: r.title, link: r.link, image: r.image,
-    last: r.last, visible: r.visible !== false, deleted: r.deleted, updated_at: r.updated_at
+    tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title, poster_path: r.poster_path,
+    last: r.last, players: r.players || {}, visible: r.visible !== false, deleted: r.deleted,
+    updated_at: r.updated_at
   }));
   const local = await get("watchlist", []);
   const snapshot = JSON.stringify(local);
-  const key = x => `${x.provider}|${x.slug}`;
+  const key = x => x.tmdb_id;
   const merged = new Map(remote.map(x => [key(x), x]));
   const toPush = [];
   for (const l of local) {
@@ -159,16 +160,15 @@ async function syncWatchlist(uid) {
     if (!r || ts(l.updated_at) > ts(r.updated_at)) { merged.set(key(l), l); toPush.push(l); }
   }
   if (toPush.length) {
-    await rest("watchlist?on_conflict=user_id,provider_id,slug", {
+    await rest("watchlist?on_conflict=user_id,tmdb_id", {
       method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
       body: toPush.map(x => ({
-        user_id: uid, provider_id: x.provider, slug: x.slug, title: x.title,
-        link: x.link || null, image: x.image || null, last: x.last || 0,
+        user_id: uid, tmdb_id: x.tmdb_id, media_type: x.media_type, title: x.title,
+        poster_path: x.poster_path || null, last: x.last || 0, players: x.players || {},
         visible: x.visible !== false, deleted: !!x.deleted, updated_at: x.updated_at
       }))
     });
   }
-  // Si la lista cambió mientras sincronizábamos, no la pisamos: la próxima sync lo arregla.
   if (JSON.stringify(await get("watchlist", [])) === snapshot) await set("watchlist", [...merged.values()]);
 }
 

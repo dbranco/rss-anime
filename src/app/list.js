@@ -1,36 +1,36 @@
 // Operaciones sobre la lista local. Borrar = marcar deleted (para que la sync propague el borrado).
+// Identidad: tmdb_id (ver docs/superpowers/specs/2026-09-27-tmdb-metadata-players-design.md) —
+// ya no {provider, slug}. `players` es el caché de "última combinación elegida" por idioma|pista,
+// nunca una fijación (ver src/app/ui/resolve.js).
 import { get, set } from "./store.js";
 
 export const live = list => list.filter(x => !x.deleted);
-const same = (x, provider, slug) => x.provider === provider && x.slug === slug;
+const same = (x, tmdbId) => x.tmdb_id === tmdbId;
 
-// visible=true (por defecto): aparece como tarjeta suelta en "Mi lista" — buscar y guardar,
-// incluido elegir un resultado al construir un paso de grupo, o al repararlo. visible=false:
-// solo repairGroup, para no ensuciar la lista con algo que nadie pidió a propósito. Una vez
-// visible, nunca se baja aquí (solo con "Ocultar", acción explícita).
-// título/link/imagen SIEMPRE se refrescan con lo que traiga `r` — da igual visible o no, si
-// quien llama tiene datos mejores (una búsqueda real) deben quedar guardados. Por eso
-// repairGroup() decide con cuidado qué pasar aquí: conserva la imagen si ya había una buena,
-// para no pisarla con el placeholder cuando su propia búsqueda no encuentra nada.
+// visible=true (por defecto): aparece como tarjeta suelta en "Mi lista". visible=false: solo
+// repairGroup, para no ensuciar la lista con algo que nadie pidió a propósito. Una vez visible,
+// nunca se baja aquí (solo con "Ocultar", acción explícita).
+// título/poster_path SIEMPRE se refrescan con lo que traiga `r` — da igual visible o no.
 export async function add(r, { visible = true } = {}) {
   const l = await get("watchlist", []);
   const now = new Date().toISOString();
-  const it = l.find(x => same(x, r.provider, r.slug));
+  const it = l.find(x => same(x, r.tmdb_id));
   if (it) {
     it.deleted = false;
     it.updated_at = now;
-    it.title = r.title; it.link = r.link; it.image = r.image;
+    it.title = r.title; it.media_type = r.media_type; it.poster_path = r.poster_path ?? it.poster_path;
     if (visible) it.visible = true;
   } else {
-    l.push({ provider: r.provider, slug: r.slug, title: r.title, link: r.link, image: r.image,
-             last: 0, visible, deleted: false, updated_at: now });
+    l.push({ tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title,
+             poster_path: r.poster_path ?? null, last: 0, players: {},
+             visible, deleted: false, updated_at: now });
   }
   await set("watchlist", l);
 }
 
-export async function mutate(provider, slug, fn) {
+export async function mutate(tmdbId, fn) {
   const l = await get("watchlist", []);
-  const it = l.find(x => same(x, provider, slug));
+  const it = l.find(x => same(x, tmdbId));
   if (!it) return null;
   fn(it);
   it.updated_at = new Date().toISOString();
