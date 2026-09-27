@@ -1,6 +1,10 @@
-// node tests/test-groups.mjs — sin mocks, funciones puras.
+// node tests/test-groups.mjs — necesita DOMParser porque groups.js usa engine.js
+// (repairGroup intenta una búsqueda real antes de caer al placeholder del slug).
 import assert from "node:assert/strict";
-import { nextNeeded, currentStep, itinerary } from "../extension/groups.js";
+import fs from "node:fs";
+import { JSDOM } from "jsdom";
+globalThis.DOMParser = new JSDOM("").window.DOMParser;
+const { nextNeeded, currentStep, itinerary } = await import("../extension/groups.js");
 
 // nextNeeded: caso simple
 assert.equal(nextNeeded({ from: 1, to: 5, exclude: [] }, 0), 1);
@@ -76,7 +80,7 @@ globalThis.chrome = { storage: { local: {
   get: async k => (k in data ? { [k]: structuredClone(data[k]) } : {}),
   set: async o => { Object.assign(data, structuredClone(o)); }
 } } };
-const { get } = await import("../extension/store.js");
+const { get, set } = await import("../extension/store.js");
 const { add, live } = await import("../extension/list.js");
 const { addGroup, renameGroup, removeGroup, addStep, removeStep, moveStep, markUpTo, unmarkFrom, live: liveGroups } =
   await import("../extension/groups.js");
@@ -152,6 +156,18 @@ wl = live(await get("watchlist", []));
 assert.ok(wl.find(w => w.provider === "p" && w.slug === "nueva"));
 assert.equal(missingSteps(await freshG3(), wl).length, 0, "tras reparar ya no faltan pasos");
 console.log("missingSteps/repairGroup OK");
+
+// repairGroup con un provider real (mock) configurado: si la búsqueda encuentra el
+// slug exacto, usa su título/imagen reales en vez del placeholder derivado del slug.
+await set("providers", JSON.parse(fs.readFileSync(new URL("./mock-provider.json", import.meta.url), "utf8")));
+const g4 = await addGroup("Con provider real");
+await addStep(g4.id, { provider: "mock", slug: "frieren", from: 1, to: 1 });
+await repairGroup(await get("groups", []).then(gs => gs.find(x => x.id === g4.id)), live(await get("watchlist", [])));
+const frierenItem = live(await get("watchlist", [])).find(w => w.provider === "mock" && w.slug === "frieren");
+assert.ok(frierenItem, "repairGroup creó la entrada");
+assert.equal(frierenItem.title, "Frieren", "usó el título real de la búsqueda, no el del slug");
+assert.equal(frierenItem.visible, false, "sigue creándose oculta");
+console.log("repairGroup con búsqueda real OK");
 
 await setPublic(g3.id, true);
 assert.equal((await get("groups", [])).find(x => x.id === g3.id).public, true);

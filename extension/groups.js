@@ -3,6 +3,7 @@
 // Ver docs/superpowers/specs/2026-09-25-watch-order-groups-design.md
 import { get, set } from "./store.js";
 import { mutate, add } from "./list.js";
+import * as engine from "./engine.js";
 
 export const live = list => list.filter(g => !g.deleted);
 
@@ -119,8 +120,18 @@ export function missingSteps(g, watchlist) {
 }
 
 export async function repairGroup(g, watchlist) {
+  const providers = await get("providers", []);
   for (const s of missingSteps(g, watchlist)) {
-    await add({ provider: s.provider, slug: s.slug, title: prettify(s.slug), link: null, image: null });
+    let title = prettify(s.slug), link = null, image = null;
+    const p = providers.find(x => x.id === s.provider);
+    if (p) {
+      try {
+        const res = await engine.search(p, prettify(s.slug));
+        const hit = res.find(r => r.slug === s.slug) || res[0];
+        if (hit) { title = hit.title; link = hit.link; image = hit.image; }
+      } catch { /* sin conexión o sin match: se queda con el título derivado del slug */ }
+    }
+    await add({ provider: s.provider, slug: s.slug, title, link, image }, { visible: false });
   }
 }
 
