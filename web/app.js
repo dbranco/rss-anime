@@ -80,9 +80,33 @@ $("#saveProvidersBtn").onclick = async () => {
   $("#configMsg").textContent = "Guardado.";
 };
 
+const epsSel = new Map(); // "provider|slug" -> episodio seleccionado, o null
+
+function renderItemEpisodePanel(item, episode, seen, onChange) {
+  const p = prov(item.provider);
+  const url = p ? engine.episodeUrl(p, item.slug, episode) : null;
+  const playerBox = el("div", {});
+  return el("div", { className: "card" },
+    el("div", { className: "body" },
+      el("b", { textContent: `${item.title} — episodio ${episode}` }),
+      el("div", { className: "actions" },
+        seen
+          ? btn("Desmarcar", async () => { await mutate(item.provider, item.slug, x => { x.last = Math.min(x.last || 0, episode - 1); }); onChange(); })
+          : btn("Marcar visto", async () => { await mutate(item.provider, item.slug, x => { x.last = Math.max(x.last || 0, episode); }); onChange(); }),
+        url ? link(url, "Abrir") : "",
+        p ? btn("▶ Ver aquí", async () => {
+              playerBox.textContent = "Buscando servidores…";
+              try { renderPlayerPicker(playerBox, await engine.episodePlayers(p, item.slug, episode)); }
+              catch (e) { playerBox.textContent = "Error: " + explain(e); }
+            }) : "",
+        btn("Cerrar", () => { epsSel.delete(`${item.provider}|${item.slug}`); onChange(); })),
+      playerBox));
+}
+
 function itemCard(item) {
   const st = el("div", { className: "msg" });
-  const eps = el("div", { className: "eps" });
+  const eps = el("div", { className: "itin" });
+  const key = `${item.provider}|${item.slug}`;
   return el("div", { className: "card" },
     item.image ? el("img", { src: safe(item.image) }) : "",
     el("div", { className: "body" },
@@ -102,11 +126,21 @@ function itemCard(item) {
           eps.textContent = "Cargando…";
           try {
             const l = await engine.episodes(prov(item.provider), item.slug);
-            eps.replaceChildren(...(l.length ? l.map(e => {
-              const a = link(e.link, String(e.number));
-              if (e.number <= (item.last || 0)) a.className = "seen";
-              return a;
-            }) : ["Sin episodios"]));
+            const renderEps = () => {
+              const sel = epsSel.get(key);
+              eps.replaceChildren(
+                ...(l.length ? l.map(e => {
+                  const seen = e.number <= (item.last || 0);
+                  const badge = el("span", {
+                    className: "ep" + (seen ? " seen" : "") + (sel === e.number ? " selected" : ""),
+                    textContent: String(e.number)
+                  });
+                  badge.onclick = () => { epsSel.set(key, sel === e.number ? null : e.number); renderEps(); };
+                  return badge;
+                }) : ["Sin episodios"]),
+                sel != null ? renderItemEpisodePanel(item, sel, sel <= (item.last || 0), renderEps) : "");
+            };
+            renderEps();
           } catch (e) { eps.textContent = "Error: " + explain(e); }
         }),
         btn("Visto +1", async () => {
@@ -146,14 +180,32 @@ function avatarEl(title, color, isCur, image) {
   return img;
 }
 
-function renderAvatars(g, cur, watchlist) {
-  const distinct = [...new Map(g.steps.map(s => [`${s.provider}|${s.slug}`, s])).values()];
+const avatarSel = new Map(); // id de grupo -> índice del título mostrado en el carrusel
+
+function distinctTitles(g) {
+  return [...new Map(g.steps.map(s => [`${s.provider}|${s.slug}`, s])).values()];
+}
+
+// Un carrusel real: una imagen a la vez, con flechas. Si hay un episodio seleccionado
+// en el itinerario, muestra el título al que pertenece (se sincroniza desde el
+// onclick de los badges, ver renderItinerary); si no, muestra el paso actual.
+function renderAvatars(g, cur, watchlist, onChange) {
+  const distinct = distinctTitles(g);
+  if (!distinct.length) return el("div", {});
   const colors = titleColors(g.steps);
-  return el("div", { className: "avatars" }, ...distinct.map(s => {
-    const it = watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
-    const isCur = !!cur && cur.step.provider === s.provider && cur.step.slug === s.slug;
-    return avatarEl(it ? it.title : s.slug, colors.get(`${s.provider}|${s.slug}`), isCur, it?.image);
-  }));
+  if (!avatarSel.has(g.id)) {
+    const curIdx = cur ? distinct.findIndex(s => s.provider === cur.step.provider && s.slug === cur.step.slug) : 0;
+    avatarSel.set(g.id, Math.max(0, curIdx));
+  }
+  const idx = Math.min(avatarSel.get(g.id), distinct.length - 1);
+  const s = distinct[idx];
+  const it = watchlist.find(w => w.provider === s.provider && w.slug === s.slug);
+  const isCur = !!cur && cur.step.provider === s.provider && cur.step.slug === s.slug;
+  const move = d => { avatarSel.set(g.id, (idx + d + distinct.length) % distinct.length); onChange(); };
+  return el("div", { className: "avatars" },
+    distinct.length > 1 ? btn("◀", () => move(-1)) : "",
+    avatarEl(it ? it.title : s.slug, colors.get(`${s.provider}|${s.slug}`), isCur, it?.image),
+    distinct.length > 1 ? btn("▶", () => move(1)) : "");
 }
 
 // Pestañas SUB/DUB + botones de servidor; al elegir uno, embebe su iframe debajo.
@@ -231,8 +283,11 @@ function renderItinerary(g, cur, watchlist, onChange) {
       style: `border-color:${color}` + (e.seen ? `;background:${color}` : "")
     });
     // Un toque selecciona/abre la tarjeta de acción; toca otra vez para cerrarla.
+    // También cambia el carrusel de avatares al título de este episodio.
     badge.onclick = () => {
       itinSel.set(g.id, isSel ? null : { step: e.step, episode: e.episode, item: e.item, seen: e.seen });
+      const idx = distinctTitles(g).findIndex(s => s.provider === e.step.provider && s.slug === e.step.slug);
+      if (idx >= 0) avatarSel.set(g.id, idx);
       renderMain();
     };
     return badge;
@@ -300,7 +355,7 @@ function groupCard(g, watchlist, owned) {
             `⚠ ${missing.length} título${missing.length === 1 ? "" : "s"} de este grupo no ${missing.length === 1 ? "está" : "están"} en tu lista. `,
             btn("Reparar", async () => { await groups.repairGroup(g, watchlist); renderMain(); requestSync(); }))
         : "",
-      renderAvatars(g, cur, watchlist),
+      renderAvatars(g, cur, watchlist, () => { renderMain(); }),
       body,
       renderItinerary(g, cur, watchlist, () => { renderMain(); requestSync(); }),
       el("div", { className: "actions" },
@@ -332,7 +387,7 @@ async function renderMain() {
           data: { id: s.group_id, user_id: s.owner_id, name: null, steps: [], _unavailable: true } };
   });
   const entries = [];
-  if (listFilter !== "groups") entries.push(...watchlist.map(item => ({ kind: "item", data: item, ts: item.updated_at })));
+  if (listFilter !== "groups") entries.push(...watchlist.filter(item => item.visible !== false).map(item => ({ kind: "item", data: item, ts: item.updated_at })));
   if (listFilter !== "media") {
     entries.push(...myGroups.map(g => ({ kind: "group", data: g, owned: true, ts: g.updated_at })));
     entries.push(...subEntries);
