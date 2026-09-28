@@ -16,6 +16,7 @@ create table if not exists public.watchlist (
   tmdb_id     int  not null,
   media_type  text not null,
   title       text not null,
+  original_title text,
   poster_path text,
   last        int  not null default 0,
   players     jsonb not null default '{}'::jsonb,

@@ -19,9 +19,11 @@ export async function add(r, { visible = true } = {}) {
     it.deleted = false;
     it.updated_at = now;
     it.title = r.title; it.media_type = r.media_type; it.poster_path = r.poster_path ?? it.poster_path;
+    it.original_title = r.original_title ?? it.original_title ?? null;
     if (visible) it.visible = true;
   } else {
     l.push({ tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title,
+             original_title: r.original_title ?? null,
              poster_path: r.poster_path ?? null, last: 0, players: {},
              visible, deleted: false, updated_at: now });
   }

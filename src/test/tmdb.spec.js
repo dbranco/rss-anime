@@ -24,16 +24,16 @@ describe("tmdb", () => {
       assert.match(url, /\/search\/multi\?/);
       assert.match(url, /api_key=test-key/);
       return { ok: true, json: async () => ({ results: [
-        { media_type: "tv", id: 1, name: "Re:Zero", poster_path: "/a.jpg", first_air_date: "2016-04-04" },
+        { media_type: "tv", id: 1, name: "Re:Zero", original_name: "Re:ゼロから始める異世界生活", poster_path: "/a.jpg", first_air_date: "2016-04-04" },
         { media_type: "person", id: 2, name: "Alguien" },
-        { media_type: "movie", id: 3, title: "Una peli", poster_path: null, release_date: "2020-01-01" }
+        { media_type: "movie", id: 3, title: "Una peli", original_title: null, poster_path: null, release_date: "2020-01-01" }
       ] }) };
     };
     const tmdb = await import("../app/tmdb.js?search1");
     const res = await tmdb.search("Re:Zero", "es-ES");
     assert.deepEqual(res, [
-      { tmdb_id: 1, media_type: "tv", title: "Re:Zero", poster_path: "/a.jpg", year: "2016" },
-      { tmdb_id: 3, media_type: "movie", title: "Una peli", poster_path: null, year: "2020" }
+      { tmdb_id: 1, media_type: "tv", title: "Re:Zero", original_title: "Re:ゼロから始める異世界生活", poster_path: "/a.jpg", year: "2016" },
+      { tmdb_id: 3, media_type: "movie", title: "Una peli", original_title: null, poster_path: null, year: "2020" }
     ]);
   });
 

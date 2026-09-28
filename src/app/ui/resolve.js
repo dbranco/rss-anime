@@ -16,7 +16,8 @@ async function firstRule(lang) {
 
 // Busca el slug de `item.title` en el sitio de `entry.rule`, deja elegir el resultado correcto,
 // y lo cachea en item.players["lang|sub"]. Si ya había algo cacheado para ese sitio, lo usa
-// directo sin volver a buscar.
+// directo sin volver a buscar. Si el título traducido de TMDB no da resultados, reintenta con
+// el original_title (el sitio puede indexar por el título japonés/original en vez del traducido).
 async function resolveSlug(item, lang, entry, box) {
   const cacheKey = `${lang}|sub`;
   const cached = item.players?.[cacheKey];
@@ -27,6 +28,11 @@ async function resolveSlug(item, lang, entry, box) {
   let results;
   try { results = await engine.search(entry.rule, item.title); }
   catch (e) { box.textContent = "Error: " + explain(e); return null; }
+  if (!results.length && item.original_title && item.original_title !== item.title) {
+    box.textContent = "Sin resultados con \"" + item.title + "\", reintentando con \"" + item.original_title + "\"…";
+    try { results = await engine.search(entry.rule, item.original_title); }
+    catch (e) { box.textContent = "Error: " + explain(e); return null; }
+  }
   if (!results.length) { box.textContent = "Sin resultados en " + entry.id; return null; }
 
   return new Promise(resolve => {

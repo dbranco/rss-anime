@@ -105,12 +105,12 @@ export function missingSteps(g, watchlist) {
 export async function repairGroup(g, watchlist) {
   const lang = await get("lang_pref", "es-ES");
   for (const s of missingSteps(g, watchlist)) {
-    let title = null, poster_path = null, media_type = s.media_type || "tv";
+    let title = null, original_title = null, poster_path = null, media_type = s.media_type || "tv";
     try {
       const info = await tmdb.getShow(s.tmdb_id, media_type, lang);
-      title = info.title; poster_path = info.poster_path; media_type = info.media_type;
+      title = info.title; original_title = info.original_title; poster_path = info.poster_path; media_type = info.media_type;
     } catch { /* sin conexión: se agrega con lo mínimo, se corrige solo en el próximo intento */ }
-    await add({ tmdb_id: s.tmdb_id, media_type, title: title || `#${s.tmdb_id}`, poster_path },
+    await add({ tmdb_id: s.tmdb_id, media_type, title: title || `#${s.tmdb_id}`, original_title, poster_path },
               { visible: false });
   }
 }
