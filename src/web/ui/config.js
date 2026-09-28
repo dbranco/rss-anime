@@ -11,6 +11,7 @@ export async function renderConfig() {
 function validatePlayers(obj) {
   if (typeof obj !== "object" || Array.isArray(obj)) throw new Error("Debe ser un objeto { idioma: { sub: [...], dub: [...] } }");
   for (const [lang, tracks] of Object.entries(obj)) {
+    if (!/^[a-z]{2}(-[A-Z]{2})?$/.test(lang)) throw new Error(`La clave de idioma "${lang}" no parece un código de idioma válido (ej. "es-ES")`);
     for (const track of ["sub", "dub"]) {
       for (const entry of (tracks[track] || [])) {
         if (!entry.id || !entry.rule) throw new Error(`Falta id/rule en ${lang}.${track}`);

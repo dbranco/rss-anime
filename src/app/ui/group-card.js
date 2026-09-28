@@ -1,5 +1,6 @@
 import { get, set } from "../store.js";
 import * as groups from "../groups.js";
+import * as tmdb from "../tmdb.js";
 import { el, btn } from "./dom.js";
 import { requestSync } from "./sync.js";
 import { renderEpisodePanel } from "./episode-panel.js";
@@ -51,7 +52,7 @@ function renderAvatars(g, cur, watchlist, onChange) {
   const move = d => { avatarSel.set(g.id, (idx + d + distinct.length) % distinct.length); onChange(); };
   return el("div", { className: "avatars" },
     distinct.length > 1 ? btn("◀", () => move(-1)) : "",
-    avatarEl(it ? it.title : s.tmdb_id, colors.get(s.tmdb_id), isCur, it?.image),
+    avatarEl(it ? it.title : s.tmdb_id, colors.get(s.tmdb_id), isCur, it?.poster_path ? tmdb.posterUrl(it.poster_path) : null),
     distinct.length > 1 ? btn("▶", () => move(1)) : "");
 }
 

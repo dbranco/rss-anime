@@ -109,7 +109,8 @@
     <div id="configView" hidden>
       <h2>Players (JSON)</h2>
       <p class="hint">Objeto { idioma: { sub: [...], dub: [...] } }, cada entrada con id y rule.
-      Plantillas dentro de cada rule: {base_url} {query} {slug} {episode}. Es JSON, así que las barras de las regex van dobles (\\).</p>
+      Plantillas dentro de cada rule: {base_url} {query} {slug} {episode}. Es JSON, así que las barras de las regex van dobles (\\).
+      Las claves de idioma deben ser códigos como TMDB los espera (ej. es-ES, en-US) — el mismo valor se usa para consultar TMDB.</p>
       <textarea id="playersJson" rows="16"></textarea>
       <input id="tmdbKey" placeholder="TMDB API key">
       <button id="saveConfigBtn" class="small">Guardar</button>

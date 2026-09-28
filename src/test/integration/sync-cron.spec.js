@@ -54,11 +54,13 @@ const TMDB_KEY = "test-key";
 const SHOWS = {
   [RE_ZERO]: { name: "Re:Zero", poster_path: null,
     episodes: [1, 2, 3].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: `2020-01-0${n}` })) },
-  // 20 y 30 conviven desde el arranque: nada en el cron mira los pasos de grupo (ver más abajo,
-  // "visibilidad"), así que da igual qué episodios existan de antemano — lo único que decide qué
+  // Rango contiguo 1..30: el cron (Task 9 fix) ya solo comprueba el episodio last+1, así que
+  // necesita que ese número exista de verdad en el mock para cada `last` que usan los tests de
+  // abajo — nada mira los pasos de grupo (ver más abajo, "visibilidad"), lo único que decide qué
   // aparece en el feed de cada usuario es su propio `last` en watchlist.
   [LONGRUN]: { name: "Long Run", poster_path: null,
-    episodes: [20, 30].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: "2020-01-01" })) },
+    episodes: Array.from({ length: 30 }, (_, i) => i + 1)
+      .map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: "2020-01-01" })) },
   [DANDADAN]: { name: "Dandadan", poster_path: null,
     episodes: [1, 2, 3].map(n => ({ episode_number: n, name: `Ep ${n}`, air_date: `2020-01-0${n}` })) }
   // FRIEREN: nunca entra a la watchlist de nadie en este archivo (paso de grupo colgando, nadie
@@ -175,28 +177,32 @@ describe("integración A/B: propagación de progreso, borrado/restauración y ed
 });
 
 describe("integración: cron encuentra episodios y publica el feed", () => {
-  it("cron: debe encontrar ep 2 y 3 (last=1), publicar el feed y no duplicar en la segunda pasada", async () => {
+  it("cron: debe encontrar SOLO el próximo episodio (last=1 => ep 2), no adelantarse a ep 3, y no duplicar en la segunda pasada", async () => {
+    // Task 9 fix (Finding 4): el cron ya no escanea el resto de la temporada, solo comprueba
+    // last+1 — así una serie con varios episodios ya emitidos no dispara una ráfaga de avisos.
     const out = run();
     feedUrl = out.match(/Feed: (\S+)/)[1];
     let xml = await (await fetch(feedUrl)).text();
     assert.match(xml, /Re:Zero — episodio 2/);
-    assert.match(xml, /Re:Zero — episodio 3/);
     assert.doesNotMatch(xml, /Re:Zero — episodio 1</);
-    assert.equal(count(xml), 2);
+    assert.doesNotMatch(xml, /Re:Zero — episodio 3/, "el cron ya no mira más allá de last+1 en una sola pasada");
+    assert.equal(count(xml), 1);
     run();
     xml = await (await fetch(feedUrl)).text();
-    assert.equal(count(xml), 2, "sin duplicados en la segunda pasada");
+    assert.equal(count(xml), 1, "sin duplicados en la segunda pasada");
     assert.match(feedUrl, new RegExp(await get("feed_token")));
   });
 
-  it("grupo: pide el episodio 20 de una serie larga que el chequeo normal (ventana de 5) no mira", async () => {
-    // Se añade DESPUÉS del bloque anterior para no alterar su recuento (así el count==2 de arriba
+  it("serie de catálogo largo: solo se avisa del episodio siguiente a `last`, no de todos los ya emitidos", async () => {
+    // Se añade DESPUÉS del bloque anterior para no alterar su recuento (así el count==1 de arriba
     // sigue siendo válido: longrun todavía no está en la watchlist de A en ese punto).
-    // Nota post-TMDB: el cron ya no distingue ítems "sueltos" de ítems que solo existen para
-    // trackear un paso de grupo — repairGroup (Task 4) garantiza que todo paso de grupo tiene su
-    // fila de watchlist, y el cron simplemente recorre TODA la watchlist del usuario por igual.
-    // Este escenario ya no depende de ninguna "ventana": solo confirma que un ítem con `last` bajo
-    // (20 está muy por delante de 0) igualmente aparece.
+    // LONGRUN tiene 30 episodios ya emitidos en el mock; A la añade recién (last=0 por defecto,
+    // SIN marcar nada como visto — un test posterior comprueba justo que A nunca tocó su `last`).
+    // El cron (Task 9 fix, Finding 4) solo debe recoger el episodio 1 en esta pasada, no los 30 de
+    // golpe — exactamente el escenario de "ráfaga de notificaciones" que describe ese finding.
+    // El cron nunca consulta grupos (Task 8, commit 40820ae, quitó checkGroupEpisode() sin
+    // sustituir su función de filtrado): el paso de grupo de abajo es solo para que los tests
+    // posteriores (grupos públicos) tengan un paso "longrun" con el que trabajar.
     use(A);
     await add({ tmdb_id: LONGRUN, media_type: "tv", title: "Long Run", poster_path: null });
     gLong = await addGroup("Maratón larga");
@@ -205,7 +211,8 @@ describe("integración: cron encuentra episodios y publica el feed", () => {
 
     run();
     let xml = await (await fetch(feedUrl)).text();
-    assert.match(xml, /Long Run — episodio 20/);
+    assert.match(xml, /Long Run — episodio 1</);
+    assert.doesNotMatch(xml, /Long Run — episodio 2/, "un solo episodio por pasada, no los 30 ya emitidos de golpe");
     const countAfterGroup = count(xml);
 
     run();
@@ -242,7 +249,7 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     cFeedUrl = `${SB}/storage/v1/object/public/feeds/${await get("feed_token")}.xml`;
     const cXml = await (await fetch(cFeedUrl)).text();
     assert.match(cXml, /Dandadan — episodio 1/);
-    assert.equal(count(cXml), 3, "los 3 episodios del mock para la lista de C");
+    assert.equal(count(cXml), 1, "el cron (Task 9 fix) solo agrega el próximo episodio, no toda la temporada del mock");
   });
 
   it("grupo público: A publica, C lo descubre en Explorar, se suscribe, progresa por su cuenta y lo valora", async () => {
@@ -300,20 +307,16 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     // cron. El cron en sí YA NO consulta grupos en absoluto (Task 8, commit 40820ae, quitó
     // checkGroupEpisode() sin sustituir su función de filtrado — Task 7, 8dd552e, solo había
     // quitado engine.episodes(); ver cron/generate-feed.mjs): ahora solo mira `last` por ítem de
-    // watchlist, así que el episodio 30 de 'longrun' sigue llegando al feed de C esté o no público
-    // el grupo que originó ese ítem — una vez que repairGroup() deja un show en tu lista (por
-    // suscripción o a mano), el cron lo sigue igual, con independencia de aquello.
+    // watchlist, así que el próximo episodio de 'longrun' (last=20 para C, ver el bloque anterior)
+    // sigue llegando al feed de C esté o no público el grupo que originó ese ítem — una vez que
+    // repairGroup() deja un show en tu lista (por suscripción o a mano), el cron lo sigue igual,
+    // con independencia de aquello. El paso de grupo `from:30,to:30` de abajo es deliberadamente
+    // ignorado por el cron (no consulta grupos): sirve para demostrar justo eso.
     //
-    // Esto documenta el comportamiento ACTUAL, que es una REGRESIÓN CONOCIDA respecto a
-    // pre-Task-8: antes, el cron acotaba las notificaciones obsoletas a MAX_AHEAD=5 episodios por
-    // delante de `last`; ahora no hay ningún tope, y encima el ítem huérfano de una suscripción
-    // despublicada/cancelada es invisible en la UI (no aparece como tarjeta suelta, visible:false),
-    // así que el usuario tampoco tiene forma de pararlo por su cuenta. La aserción ORIGINAL
-    // describía el comportamiento correcto (el cron sí debería poder cortar el feed de un grupo
-    // despublicado o de una suscripción cancelada); esta la reemplaza solo porque el código actual
-    // ya no lo cumple — no porque el cambio sea deseable. Arreglar esto necesita lógica nueva sin
-    // especificar (en cron/generate-feed.mjs + background.js + groups.js) y queda fuera del
-    // alcance de Task 9; se escala como seguimiento en vez de intentarlo acá.
+    // Nota histórica: antes del fix del Finding 4 (Task 9), el cron no tenía tope de episodios por
+    // pasada, así que este mismo escenario también habría mostrado el episodio 30 en una sola
+    // pasada (ráfaga). Con el tope de "solo el próximo episodio" ya en vigor, el feed de C avanza
+    // de uno en uno (episodio 21, el siguiente a su `last`=20), no directo al 30.
     use(A);
     await setPublic(gLong.id, false);
     await addStep(gLong.id, { tmdb_id: LONGRUN, media_type: "tv", from: 30, to: 30 });
@@ -326,8 +329,8 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
       "la suscripción sigue viva: la UI pinta el hueco 'Grupo ya no disponible.' con su botón de baja");
     run();
     let cXml2 = await (await fetch(cFeedUrl)).text();
-    assert.match(cXml2, /Long Run — episodio 30/,
-      "el cron sigue viendo el ítem propio de C (repairGroup ya lo dejó en su watchlist normal); no distingue por grupo");
+    assert.match(cXml2, /Long Run — episodio 21/,
+      "el cron sigue viendo el ítem propio de C (repairGroup ya lo dejó en su watchlist normal) y solo avanza al siguiente episodio (last=20); no distingue por grupo");
 
     // A lo vuelve a publicar: subscribed_groups lo recupera (la caché sí depende del estado del
     // grupo); el feed de C, que nunca dejó de incluirlo, no cambia.
@@ -339,7 +342,7 @@ describe("integración C (no admin): providers compartidos en solo lectura", () 
     assert.equal((await get("subscribed_groups", [])).length, 1, "al republicar, la caché lo recupera");
     run();
     cXml2 = await (await fetch(cFeedUrl)).text();
-    assert.match(cXml2, /Long Run — episodio 30/);
+    assert.match(cXml2, /Long Run — episodio 21/);
   });
 });
 

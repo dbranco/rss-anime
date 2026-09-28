@@ -25,7 +25,8 @@
   <p>Objeto <code>{ idioma: { sub: [...], dub: [...] } }</code>, cada entrada con <code>id</code> y <code>rule</code>.
   Plantillas dentro de cada <code>rule</code>: <code>{base_url}</code> <code>{query}</code> <code>{slug}</code> <code>{episode}</code>.
   Las regex van en JSON, así que las barras se duplican (<code>"(\\d+)/?$"</code>).
-  Al guardar, el navegador pide permiso para acceder al dominio de cada player.</p>
+  Al guardar, el navegador pide permiso para acceder al dominio de cada player.
+  Las claves de idioma deben ser códigos como TMDB los espera (ej. es-ES, en-US) — el mismo valor se usa para consultar TMDB.</p>
   <textarea id="json" spellcheck="false"></textarea>
   <input id="tmdbKey" class="wide" placeholder="TMDB API key">
   <button id="save">Guardar</button><span id="status" class="st"></span>

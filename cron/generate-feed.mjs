@@ -63,8 +63,7 @@ async function publish(token, xml) {
 // cliente. Una sola fuente de verdad evita que las dos copias se desincronicen.
 const [appConfig] = await rest("app_config?select=players,tmdb_key&id=eq.1");
 globalThis.__tmdbApiKey = appConfig?.tmdb_key || null;
-const players = appConfig?.players || {};
-if (!Object.keys(players).length) console.warn("app_config vacío: ningún player configurado todavía");
+if (!globalThis.__tmdbApiKey) { console.error("Falta configurar app_config.tmdb_key"); process.exit(1); }
 const lang = process.env.TMDB_LANG || "es-ES";
 const tmdb = await import("../src/app/tmdb.js");
 
@@ -88,13 +87,12 @@ for (const st of settings) {
       catch (e) { console.warn(`Fallo en ${it.title}: ${e.message}`); continue; }
       const have = new Set(known.filter(f => f.tmdb_id === it.tmdb_id).map(f => f.episode));
       const today = new Date().toISOString().slice(0, 10);
-      for (const e of episodes) {
-        if (e.number <= it.last || have.has(e.number)) continue;
-        if (!e.air_date || e.air_date > today) break; // episodios vienen ordenados, el resto es futuro
-        fresh.push({ user_id: st.user_id, tmdb_id: it.tmdb_id, episode: e.number,
-                     title: `${it.title} — episodio ${e.number}`,
+      const next = episodes.find(e => e.number === it.last + 1);
+      if (next && !have.has(next.number) && next.air_date && next.air_date <= today) {
+        fresh.push({ user_id: st.user_id, tmdb_id: it.tmdb_id, episode: next.number,
+                     title: `${it.title} — episodio ${next.number}`,
                      link: `https://www.themoviedb.org/tv/${it.tmdb_id}` });
-        console.log(`Nuevo: ${it.title} ep ${e.number}`);
+        console.log(`Nuevo: ${it.title} ep ${next.number}`);
       }
     }
 

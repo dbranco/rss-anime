@@ -1,6 +1,8 @@
 # Series Tracker
 
-Tres piezas que comparten el mismo motor de scraping (`src/app/engine.js`):
+Tres piezas que comparten la misma base de código: TMDB (`src/app/tmdb.js`) da la búsqueda, las fichas y
+el calendario de episodios; el motor de scraping (`src/app/engine.js`) ya solo sirve para encontrar dónde
+reproducir cada episodio en las webs que configures (`app_config.players`):
 
 | Pieza | Para qué |
 |---|---|
@@ -14,12 +16,20 @@ y motor en tu navegador (busca, guarda, navega). Se complementan.
 
 ## 1. Supabase
 1. Crea un proyecto (plan gratuito; los proyectos inactivos se pausan, compruébalo en su web).
-2. SQL Editor → pega y ejecuta `supabase/schema.sql`. Alternativa con la CLI de Supabase: las mismas
-   tablas están en `supabase/migrations/`, así que `supabase db push` las aplica (y aplica también las
-   nuevas al actualizar, sin volver a pegar SQL a mano).
+2. **Proyecto nuevo:** SQL Editor → pega y ejecuta `supabase/schema.sql`. Alternativa con la CLI de
+   Supabase: las mismas tablas están en `supabase/migrations/`, así que `supabase db push` las aplica (y
+   aplica también las nuevas al actualizar, sin volver a pegar SQL a mano).
+   **Despliegue ya existente (de antes de la identidad por `tmdb_id`):** NO vuelvas a pegar
+   `schema.sql` — sus `create table` se editaron en el sitio en vez de añadir `alter table`, así que
+   `create table if not exists` ya no hace nada contra una base de datos que ya existe. Aplica en su
+   lugar, por SQL Editor, el contenido de `supabase/migrations/20260927120000_tmdb_identity.sql`.
 3. Authentication → Providers → Email activo. Si "Confirm email" está activado, tendrás que confirmar el
    correo tras crear la cuenta; para uso personal puedes desactivarlo.
 4. Settings → API: copia la URL, la clave `anon` (va en la extensión) y la `service_role` (SOLO para el cron).
+5. Consigue una API key gratuita en [themoviedb.org](https://www.themoviedb.org/settings/api) y, como
+   admin, guárdala en `app_config.tmdb_key` (Opciones de la extensión o Config de la PWA — ver "Providers
+   como config de la app" más abajo). Sin ella no funcionan la búsqueda, las fichas de episodios ni las
+   notificaciones/feed RSS.
 
 ## 2. Extensión
 1. `chrome://extensions` → modo de desarrollador → "Cargar descomprimida" → carpeta `src/` (el manifest vive en
@@ -63,8 +73,10 @@ en segundo plano funcionen con los providers del admin.
 La pestaña "Grupos" (popup y PWA) son playlists de orden de visionado: reordenan y filtran ítems que ya
 tienes en tu lista, cada paso con su rango `desde`/`hasta` y episodios a excluir (fillers). El progreso
 sale del mismo "visto hasta" de cada ítem, no hay contador aparte. Se sincronizan igual que la lista, y
-tanto las notificaciones como el feed RSS avisan del episodio que el grupo necesita a continuación. En
-esta versión los grupos se crean y se borran; para cambiar uno, bórralo y créalo de nuevo.
+las notificaciones y el feed RSS son por título (según el calendario de emisión de TMDB), no por grupo:
+avisan de cada episodio nuevo de cualquier serie de tu lista, incluidas las que solo están ahí para
+trackear un paso de un grupo. En esta versión los grupos se crean y se borran; para cambiar uno, bórralo
+y créalo de nuevo.
 
 Un grupo puede hacerse público al crearlo ("Pública"): cualquier cuenta lo encuentra
 en la pestaña **Explorar**, se suscribe (sin copiarlo — sigue el original en vivo) y

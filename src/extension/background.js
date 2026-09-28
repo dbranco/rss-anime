@@ -1,6 +1,7 @@
 import { get, set } from "../app/store.js";
 import { live } from "../app/list.js";
 import { syncNow, getSession } from "../app/sync.js";
+import * as tmdb from "../app/tmdb.js";
 
 const ALARM = "check";
 const NEWS_CAP = 200;
@@ -27,33 +28,6 @@ async function updateBadge(news) {
   await chrome.action.setBadgeText({ text: news.length ? String(news.length) : "" });
 }
 
-async function ensureOffscreen() {
-  const ctx = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
-  if (!ctx.length) {
-    await chrome.offscreen.createDocument({
-      url: "extension/offscreen.html",
-      reasons: ["DOM_PARSER"],
-      justification: "Parsear el HTML de las webs configuradas"
-    });
-  }
-}
-
-async function callOffscreen(op, ...args) {
-  await ensureOffscreen();
-  let r;
-  for (let i = 0; i < 4; i++) {
-    try {
-      r = await chrome.runtime.sendMessage({ target: "offscreen", op, args });
-      break;
-    } catch (e) { // el documento aún no registró su listener
-      if (i === 3) throw e;
-      await new Promise(res => setTimeout(res, 300));
-    }
-  }
-  if (!r?.ok) throw new Error(r?.error || "sin respuesta");
-  return r.data;
-}
-
 // Compara `last` contra los episodios de TMDB con `air_date` ya pasada. Cubre tanto los ítems
 // sueltos como los que solo existen para trackear un paso de grupo (visible:false) — los grupos
 // ya derivan su progreso de `last` (sin cambios), así que no hace falta un checkGroups() aparte.
@@ -66,21 +40,21 @@ async function checkAll() {
   for (const it of list) {
     if (it.media_type !== "tv") continue; // las películas no tienen calendario de episodios
     let episodes;
-    try { episodes = await callOffscreen("getSeasonEpisodes", it.tmdb_id, 1, lang); }
+    try { episodes = await tmdb.getSeasonEpisodes(it.tmdb_id, 1, lang); }
     catch (e) { console.warn(`Fallo en ${it.title}:`, e); continue; }
     const last = it.last || 0;
-    for (const e of episodes) {
-      if (e.number <= last) continue;
-      if (!e.air_date || e.air_date > today) break; // episodios vienen ordenados, el resto es futuro
-      const id = `${it.tmdb_id}-e${e.number}`;
-      if (notified.includes(id)) continue;
-      notified.push(id);
-      news.unshift({ id, tmdb_id: it.tmdb_id, episode: e.number,
-                     title: `${it.title} — episodio ${e.number}`, link: null });
-      chrome.notifications.create(id, {
-        type: "basic", iconUrl: "extension/icons/icon128.png",
-        title: "Nuevo episodio", message: `${it.title} — episodio ${e.number}`
-      });
+    const next = episodes.find(e => e.number === last + 1);
+    if (next && next.air_date && next.air_date <= today) {
+      const id = `${it.tmdb_id}-e${next.number}`;
+      if (!notified.includes(id)) {
+        notified.push(id);
+        news.unshift({ id, tmdb_id: it.tmdb_id, episode: next.number,
+                       title: `${it.title} — episodio ${next.number}`, link: null });
+        chrome.notifications.create(id, {
+          type: "basic", iconUrl: "extension/icons/icon128.png",
+          title: "Nuevo episodio", message: `${it.title} — episodio ${next.number}`
+        });
+      }
     }
   }
   await set("news", news.slice(0, NEWS_CAP));

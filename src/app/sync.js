@@ -149,7 +149,7 @@ async function syncWatchlist(uid) {
     last: r.last, players: r.players || {}, visible: r.visible !== false, deleted: r.deleted,
     updated_at: r.updated_at
   }));
-  const local = await get("watchlist", []);
+  const local = (await get("watchlist", [])).filter(x => x.tmdb_id != null);
   const snapshot = JSON.stringify(local);
   const key = x => x.tmdb_id;
   const merged = new Map(remote.map(x => [key(x), x]));

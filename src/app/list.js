@@ -4,7 +4,7 @@
 // nunca una fijación (ver src/app/ui/resolve.js).
 import { get, set } from "./store.js";
 
-export const live = list => list.filter(x => !x.deleted);
+export const live = list => list.filter(x => !x.deleted && x.tmdb_id != null);
 const same = (x, tmdbId) => x.tmdb_id === tmdbId;
 
 // visible=true (por defecto): aparece como tarjeta suelta en "Mi lista". visible=false: solo
