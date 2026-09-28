@@ -58,4 +58,30 @@ describe("engine.episodePlayers", () => {
       DUB: []
     });
   });
+
+  it("matchea embeds_regex aunque el bloque venga formateado en varias líneas (sitios reales, ej. AnimeAV1)", async () => {
+    // Reproduce el HTML real de un sitio como AnimeAV1: el objeto embeds va indentado con saltos
+    // de línea dentro de {} y [] (a diferencia del fixture de mock_site.py, que lo sirve en una
+    // sola línea) — sin el flag "s" (dotAll) en episodePlayers(), `.` no cruza esos \n y el match
+    // falla en silencio. Se inyecta vía __seriesTrackerFetch en vez de mock_site.py para no tener
+    // que sumar una ruta nueva solo para esto.
+    const html = `<script>
+      window.__NUXT__={embeds:{
+SUB:[
+{server:"Voe",url:"https://voe.example/e/multiline"}
+],
+DUB:[
+{server:"Voe",url:"https://voe.example/e/multiline-dub"}
+]
+},downloads:[]};
+    </script>`;
+    globalThis.__seriesTrackerFetch = async () => ({ status: 200, html, finalUrl: "http://mock/multiline" });
+    try {
+      const players = await engine.episodePlayers(p, "re-zero", 3);
+      assert.deepEqual(players.SUB, [{ server: "Voe", url: "https://voe.example/e/multiline" }]);
+      assert.deepEqual(players.DUB, [{ server: "Voe", url: "https://voe.example/e/multiline-dub" }]);
+    } finally {
+      delete globalThis.__seriesTrackerFetch;
+    }
+  });
 });

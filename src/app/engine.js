@@ -84,11 +84,15 @@ export async function episodePlayers(p, slug, episode) {
   const { html } = await fetchHtml(p, url);
 
   if (e.embeds_regex) {
-    const m = new RegExp(e.embeds_regex).exec(html);
+    // "s" (dotAll): el bloque JS embebido suele venir formateado con saltos de línea dentro del
+    // objeto — sin esta bandera, `.` no matchea `\n` y la búsqueda falla en silencio (devuelve
+    // null) aunque el HTML sí tenga los datos. El fixture de test es de una sola línea, por eso
+    // esto no se detectó hasta probarlo contra un sitio real.
+    const m = new RegExp(e.embeds_regex, "s").exec(html);
     if (!m) return null;
     const blob = m[1];
     const track = t => {
-      const tm = new RegExp(`${t}:\\[(.*?)\\]`).exec(blob);
+      const tm = new RegExp(`${t}:\\[(.*?)\\]`, "s").exec(blob);
       if (!tm) return [];
       return [...tm[1].matchAll(/\{server:"([^"]+)",url:"([^"]+)"\}/g)].map(x => ({ server: x[1], url: x[2] }));
     };

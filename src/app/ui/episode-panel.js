@@ -11,9 +11,12 @@ export function renderItemEpisodePanel(item, episode, seen, onChange) {
     el("div", { className: "body" },
       el("b", { textContent: `${item.title} — episodio ${episode}` }),
       el("div", { className: "actions" },
+        // mutate() opera sobre una copia recién leída de storage, no sobre este `item` — sin
+        // sincronizarlo de vuelta, el panel se queda mostrando el estado viejo hasta un refresh
+        // completo de la página (item nunca se refresca solo por re-renderizar localmente).
         seen
-          ? btn("Desmarcar", async () => { await mutate(item.tmdb_id, x => { x.last = Math.min(x.last || 0, episode - 1); }); onChange(); })
-          : btn("Marcar visto", async () => { await mutate(item.tmdb_id, x => { x.last = Math.max(x.last || 0, episode); }); onChange(); }),
+          ? btn("Desmarcar", async () => { const u = await mutate(item.tmdb_id, x => { x.last = Math.min(x.last || 0, episode - 1); }); if (u) Object.assign(item, u); onChange(); })
+          : btn("Marcar visto", async () => { const u = await mutate(item.tmdb_id, x => { x.last = Math.max(x.last || 0, episode); }); if (u) Object.assign(item, u); onChange(); }),
         btn("▶ Ver aquí", () => resolveAndPlay(item, episode, playerBox)),
         btn("Cerrar", () => onChange(true))),
       playerBox));
