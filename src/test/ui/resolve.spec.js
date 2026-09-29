@@ -223,5 +223,9 @@ describe("ui/resolve: resolveAndPlay / resolveSlug", () => {
     assert.ok(a, "debe mostrar un enlace en su lugar");
     assert.equal(a.target, "_blank");
     assert.equal(a.rel, "noopener");
+    // Enlaza a la página del episodio en el sitio original, NO al servidor embebible scrapeado
+    // (engine.episodePlayers()'s server.url) — sitios como meusanimes.blog rechazan el acceso
+    // directo a ese servidor si no detectan que viene de una página de su propio dominio.
+    assert.equal(a.href, "http://127.0.0.1:8001/blabla/re-zero/1");
   });
 });
