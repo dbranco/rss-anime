@@ -4,6 +4,7 @@ import * as tmdb from "../tmdb.js";
 import { el, btn } from "./dom.js";
 import { requestSync } from "./sync.js";
 import { renderEpisodePanel } from "./episode-panel.js";
+import { renderPlayerPrefSelectors } from "./player-pref.js";
 
 const PALETTE = ["#2f6690", "#b8560f", "#2f7a4f", "#7a3b9e", "#a83a2c", "#5c6169"];
 const ITIN_PAGE_SIZE = 25;
@@ -125,6 +126,7 @@ export function groupCard(g, watchlist, owned, onChange) {
         el("div", { textContent:
           `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
           `${cur.item ? cur.item.title : cur.step.tmdb_id} — episodio ${cur.next}` }),
+        cur.item ? renderPlayerPrefSelectors(cur.item, onChange) : "",
         cur.item
           ? el("div", { className: "actions" },
               btn("Visto", () => onMark(cur.step, cur.next)))
