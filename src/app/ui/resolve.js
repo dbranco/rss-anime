@@ -82,6 +82,8 @@ export async function resolveAndPlay(item, episode, playerBox) {
 
   await ensurePermissions();
   playerBox.textContent = "Buscando servidores…";
-  try { renderPlayerPicker(playerBox, await engine.episodePlayers(entry.rule, slug, episode)); }
-  catch (e) { playerBox.textContent = "Error: " + explain(e); }
+  try {
+    const players = await engine.episodePlayers(entry.rule, slug, episode);
+    renderPlayerPicker(playerBox, players, { embedBlocked: !!entry.rule.episode?.embed_blocked });
+  } catch (e) { playerBox.textContent = "Error: " + explain(e); }
 }

@@ -1,9 +1,13 @@
-import { el } from "./dom.js";
+import { el, link } from "./dom.js";
 
-// Pestañas SUB/DUB + botones de servidor; al elegir uno, embebe su iframe debajo.
+// Pestañas SUB/DUB + botones de servidor; al elegir uno, embebe su iframe debajo (o, si el
+// provider declara embed_blocked, muestra un enlace para abrirlo en pestaña nueva en su lugar —
+// algunos sitios (ej. meusanimes.blog) envían Content-Security-Policy: frame-ancestors que
+// bloquea el iframe desde cualquier origen que no sea el suyo propio; no hay forma de detectar
+// ese bloqueo de forma fiable en runtime, así que es un flag declarado en la config).
 // No todos los servidores que lista un provider sirven para esto — solo entran aquí los que
 // engine.episodePlayers() ya filtró como embebibles (ver ese comentario en engine.js).
-export function renderPlayerPicker(box, players) {
+export function renderPlayerPicker(box, players, { embedBlocked = false } = {}) {
   if (!players || (!players.SUB.length && !players.DUB.length)) {
     box.textContent = "Este provider no tiene servidores para ver aquí.";
     return;
@@ -15,7 +19,9 @@ export function renderPlayerPicker(box, players) {
 
   const loadFrame = () => {
     const s = players[trackSel.value][serverSel.selectedIndex];
-    frame.replaceChildren(el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
+    frame.replaceChildren(embedBlocked
+      ? link(s.url, "▶ Abrir en pestaña nueva")
+      : el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
   };
   const fillServers = () => {
     serverSel.replaceChildren(...players[trackSel.value].map(s => el("option", { value: s.server, textContent: s.server })));

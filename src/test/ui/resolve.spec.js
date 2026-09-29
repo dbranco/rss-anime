@@ -154,4 +154,21 @@ describe("ui/resolve: resolveAndPlay / resolveSlug", () => {
     await resolve.resolveAndPlay(item, 1, box); // se resuelve sola: nunca hay elección pendiente
     assert.ok(box.querySelector("select"), "fue directo a episodePlayers con el slug cacheado, sin buscar");
   });
+
+  it("provider con episode.embed_blocked → enlace 'abrir en pestaña nueva' en vez de iframe", async () => {
+    const { store, resolve } = await load();
+    const blockedRule = { ...providerRule, episode: { ...providerRule.episode, embed_blocked: true } };
+    await store.set("players", { "es-ES": { sub: [{ id: blockedRule.id, rule: blockedRule }], dub: [] } });
+    const item = {
+      tmdb_id: 6, title: "Título que no existe en el catálogo",
+      players: { "es-ES|sub": { providerId: blockedRule.id, slug: "re-zero" } }
+    };
+    const box = dom.window.document.getElementById("playerBox");
+    await resolve.resolveAndPlay(item, 1, box);
+    assert.equal(box.querySelector("iframe"), null, "no debe embeber un iframe para este provider");
+    const a = box.querySelector("a");
+    assert.ok(a, "debe mostrar un enlace en su lugar");
+    assert.equal(a.target, "_blank");
+    assert.equal(a.rel, "noopener");
+  });
 });
