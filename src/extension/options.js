@@ -1,5 +1,6 @@
 import { get, set } from "../app/store.js";
 import { signIn, signUp, signOut, getSession, saveAppPlayers } from "../app/sync.js";
+import { getLangPref, setLangPref } from "../app/ui/state.js";
 import { requestSync } from "./syncClient.js";
 
 const $ = s => document.querySelector(s);
@@ -25,6 +26,7 @@ async function loadConfig() {
   $("#json").value = JSON.stringify(await get("players", {}), null, 2);
   $("#tmdbKey").value = (await get("tmdb_key")) || "";
   $("#interval").value = await get("interval", 60);
+  $("#langPref").value = await getLangPref();
   const admin = await get("is_admin", false);
   $("#providersSection").hidden = !admin;
   $("#providersReadonly").hidden = admin;
@@ -77,6 +79,11 @@ $("#save").onclick = () => {
 $("#saveInterval").onclick = async () => {
   await set("interval", Math.max(10, +$("#interval").value || 60));
   $("#intervalStatus").textContent = "Guardado.";
+};
+
+$("#saveLang").onclick = async () => {
+  await setLangPref($("#langPref").value);
+  $("#langStatus").textContent = "Guardado.";
 };
 
 // Pide permiso para el dominio de Supabase; debe ser lo primero que ocurre en el clic.

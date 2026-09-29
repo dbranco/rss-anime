@@ -1,12 +1,20 @@
 import { get } from "../../app/store.js";
 import { saveAppPlayers } from "../../app/sync.js";
+import { getLangPref, setLangPref } from "../../app/ui/state.js";
 import { $, explain } from "../../app/ui/dom.js";
 
 export async function renderConfig() {
   $("#playersJson").value = JSON.stringify(await get("players", {}), null, 2);
   $("#tmdbKey").value = (await get("tmdb_key")) || "";
+  $("#langPref").value = await getLangPref();
   $("#configMsg").textContent = "";
+  $("#langMsg").textContent = "";
 }
+
+$("#saveLangBtn").onclick = async () => {
+  await setLangPref($("#langPref").value);
+  $("#langMsg").textContent = "Guardado.";
+};
 
 function validatePlayers(obj) {
   if (typeof obj !== "object" || Array.isArray(obj)) throw new Error("Debe ser un objeto { idioma: { sub: [...], dub: [...] } }");

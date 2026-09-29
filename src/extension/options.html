@@ -20,6 +20,21 @@
 <body>
 <h1>Series Tracker</h1>
 
+<h2>Idioma</h2>
+<p>Se usa para pedir la metadata a TMDB y para elegir qué entrada de "Players" se usa al buscar sitios de reproducción.</p>
+<div class="row">
+  <select id="langPref">
+    <option value="es-ES">Español (es-ES)</option>
+    <option value="en-US">English (en-US)</option>
+    <option value="pt-PT">Português (pt-PT)</option>
+    <option value="pt-BR">Português Brasil (pt-BR)</option>
+    <option value="ja-JP">日本語 (ja-JP)</option>
+    <option value="fr-FR">Français (fr-FR)</option>
+    <option value="de-DE">Deutsch (de-DE)</option>
+  </select>
+  <button id="saveLang">Guardar</button><span id="langStatus" class="st"></span>
+</div>
+
 <h2>Players (JSON)</h2>
 <div id="providersSection" hidden>
   <p>Objeto <code>{ idioma: { sub: [...], dub: [...] } }</code>, cada entrada con <code>id</code> y <code>rule</code>.
