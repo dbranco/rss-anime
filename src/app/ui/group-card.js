@@ -66,7 +66,14 @@ function renderItinerary(g, cur, watchlist, onChange) {
   if (!itinPage.has(g.id)) itinPage.set(g.id, curIdx >= 0 ? Math.floor(curIdx / ITIN_PAGE_SIZE) : 0);
   const page = Math.min(itinPage.get(g.id), pages - 1);
   const start = page * ITIN_PAGE_SIZE;
-  const sel = itinSel.get(g.id);
+  let sel = itinSel.get(g.id);
+  // El item capturado al hacer clic en el badge puede quedar obsoleto si mientras tanto se cambia
+  // su player_pref (ver los selectores de player-pref.js montados en cur.item) — se refresca desde
+  // `items` (ya recalculado arriba en este mismo render) antes de usarlo.
+  if (sel) {
+    const fresh = items.find(e => e.step === sel.step && e.episode === sel.episode);
+    if (fresh) sel = { ...sel, item: fresh.item };
+  }
 
   const badges = items.slice(start, start + ITIN_PAGE_SIZE).map((e, i) => {
     const globalIdx = start + i;

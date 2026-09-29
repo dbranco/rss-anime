@@ -1,6 +1,7 @@
 import { get } from "../store.js";
 import { mutate } from "../list.js";
 import { el } from "./dom.js";
+import { requestSync } from "./sync.js";
 
 // Selectores encadenados idioma → pista → proveedor para elegir, por ítem, qué combinación de
 // app_config.players usar en "Ver aquí" (ver resolve.js). Solo lista combinaciones que existen
@@ -23,9 +24,17 @@ export function renderPlayerPrefSelectors(item, onChange) {
     const tracksFor = lang => ["sub", "dub"].filter(t => (players[lang]?.[t] || []).length);
     const entriesFor = (lang, track) => (track && players[lang]?.[track]) || [];
 
+    // Nunca listar/elegir un idioma sin ninguna pista con providers de verdad debajo (mismo
+    // criterio de "solo combinaciones que existen" que ya aplica tracksFor/entriesFor a pista y
+    // proveedor) — si no, un idioma sin tracks tumbaba el componente entero aunque otros idiomas
+    // configurados sí tuvieran providers.
+    const langsWithTracks = langs.filter(l => tracksFor(l).length);
+    if (!langsWithTracks.length) return;
+
     const defaultLang = await get("lang_pref", "es-ES");
     const pref = item.player_pref || {};
-    const initialLang = langs.includes(pref.lang) ? pref.lang : (langs.includes(defaultLang) ? defaultLang : langs[0]);
+    const initialLang = langsWithTracks.includes(pref.lang) ? pref.lang
+      : (langsWithTracks.includes(defaultLang) ? defaultLang : langsWithTracks[0]);
     const initialTracks = tracksFor(initialLang);
     if (!initialTracks.length) return;
     const initialTrack = initialTracks.includes(pref.track) ? pref.track : initialTracks[0];
@@ -42,6 +51,10 @@ export function renderPlayerPrefSelectors(item, onChange) {
       const updated = await mutate(item.tmdb_id, x => { x.player_pref = next; });
       if (updated) Object.assign(item, updated);
       onChange();
+      // Fire-and-forget, igual que list-item.js/group-card.js: no se espera (no cambiar el
+      // timing de persist()), pero se atrapa el rechazo para no dejar una promesa rechazada
+      // sin manejar cuando no hay sesión iniciada o falla la red.
+      requestSync().catch(() => {});
     };
 
     const renderProviders = () => {
@@ -55,7 +68,7 @@ export function renderPlayerPrefSelectors(item, onChange) {
       renderProviders();
     };
 
-    langSel.replaceChildren(...langs.map(l => el("option", { value: l, textContent: l })));
+    langSel.replaceChildren(...langsWithTracks.map(l => el("option", { value: l, textContent: l })));
     langSel.value = initialLang;
     renderTracks();
     trackSel.value = initialTrack;

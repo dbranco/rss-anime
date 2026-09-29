@@ -164,4 +164,9 @@ create policy "read all ratings" on public.group_ratings
 -- como si fueran media añadida deliberadamente.
 alter table public.watchlist add column if not exists visible boolean not null default true;
 
+-- Idioma/pista/proveedor elegidos por el usuario para este ítem concreto (ver
+-- docs/superpowers/specs/2026-09-29-playback-cascade-design.md y player-pref.js); si está vacío,
+-- resolve.js cae en los valores por defecto (lang_pref global, pista "sub", primer proveedor).
+alter table public.watchlist add column if not exists player_pref jsonb not null default '{}'::jsonb;
+
 notify pgrst, 'reload schema';

@@ -149,6 +149,15 @@ describe("integración A/B: propagación de progreso, borrado/restauración y ed
     assert.equal(live(await get("watchlist", []))[0].last, 1);
   });
 
+  it("A cambia player_pref -> B lo recibe tras sincronizar (no se descarta en el push/pull)", async () => {
+    use(A);
+    const pref = { lang: "es-ES", track: "sub", providerId: "mock" };
+    await mutate(RE_ZERO, it => { it.player_pref = pref; });
+    await syncNow();
+    use(B); await syncNow();
+    assert.deepEqual(live(await get("watchlist", []))[0].player_pref, pref);
+  });
+
   it("A borra -> B lo ve borrado; A vuelve a añadir -> B lo recupera", async () => {
     use(A);
     await mutate(RE_ZERO, it => { it.deleted = true; });

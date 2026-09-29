@@ -146,8 +146,8 @@ export async function saveAppPlayers(players, tmdbKey) {
 async function syncWatchlist(uid) {
   const remote = (await rest(`watchlist?select=*&user_id=eq.${uid}`)).map(r => ({
     tmdb_id: r.tmdb_id, media_type: r.media_type, title: r.title, original_title: r.original_title || null,
-    poster_path: r.poster_path, last: r.last, players: r.players || {}, visible: r.visible !== false,
-    deleted: r.deleted, updated_at: r.updated_at
+    poster_path: r.poster_path, last: r.last, players: r.players || {}, player_pref: r.player_pref || {},
+    visible: r.visible !== false, deleted: r.deleted, updated_at: r.updated_at
   }));
   const local = (await get("watchlist", [])).filter(x => x.tmdb_id != null);
   const snapshot = JSON.stringify(local);
@@ -165,7 +165,7 @@ async function syncWatchlist(uid) {
       body: toPush.map(x => ({
         user_id: uid, tmdb_id: x.tmdb_id, media_type: x.media_type, title: x.title,
         original_title: x.original_title || null, poster_path: x.poster_path || null,
-        last: x.last || 0, players: x.players || {},
+        last: x.last || 0, players: x.players || {}, player_pref: x.player_pref || {},
         visible: x.visible !== false, deleted: !!x.deleted, updated_at: x.updated_at
       }))
     });
