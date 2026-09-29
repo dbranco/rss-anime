@@ -4,6 +4,7 @@ import { mutate } from "../list.js";
 import { el, btn, safe, explain } from "./dom.js";
 import { requestSync } from "./sync.js";
 import { renderItemEpisodePanel } from "./episode-panel.js";
+import { renderPlayerPrefSelectors } from "./player-pref.js";
 
 const epsSel = new Map(); // tmdb_id -> episodio seleccionado, o null
 
@@ -23,6 +24,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
     item.poster_path ? el("img", { src: safe(tmdb.posterUrl(item.poster_path)) }) : "",
     el("div", { className: "body" },
       el("b", { textContent: item.title }),
+      renderPlayerPrefSelectors(item, onChange),
       el("div", { className: "st", textContent: "Visto hasta el episodio " + (item.last || 0) }),
       el("div", { className: "actions" },
         btn("Episodios", async () => {
