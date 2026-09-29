@@ -37,6 +37,59 @@ describe("tmdb", () => {
     ]);
   });
 
+  it("getShow normaliza tv/movie e incluye origin_country solo en tv", async () => {
+    globalThis.fetch = async url => {
+      if (/\/tv\/1\?/.test(url)) {
+        return { ok: true, json: async () => ({
+          name: "Re:Zero", original_name: "Re:ゼロから始める異世界生活", poster_path: "/a.jpg",
+          origin_country: ["JP"], seasons: [{ season_number: 0 }, { season_number: 1 }]
+        }) };
+      }
+      if (/\/movie\/2\?/.test(url)) {
+        return { ok: true, json: async () => ({
+          title: "Una peli", original_title: "Un pelicula", poster_path: null
+        }) };
+      }
+      throw new Error("URL inesperada: " + url);
+    };
+    const tmdb = await import("../app/tmdb.js?getshow1");
+    assert.deepEqual(await tmdb.getShow(1, "tv", "es-ES"), {
+      tmdb_id: 1, media_type: "tv", title: "Re:Zero", original_title: "Re:ゼロから始める異世界生活",
+      poster_path: "/a.jpg", origin_country: "JP", seasons: [1]
+    });
+    assert.deepEqual(await tmdb.getShow(2, "movie", "es-ES"), {
+      tmdb_id: 2, media_type: "movie", title: "Una peli", original_title: "Un pelicula",
+      poster_path: null, origin_country: null, seasons: null
+    });
+  });
+
+  it("getAlternativeTitles normaliza results (tv) y titles (movie) al mismo shape", async () => {
+    globalThis.fetch = async url => {
+      if (/\/tv\/1\/alternative_titles/.test(url)) {
+        return { ok: true, json: async () => ({ results: [
+          { iso_3166_1: "JP", title: "ReZero kara Hajimeru Isekai Seikatsu", type: "romanization" },
+          { iso_3166_1: "JP", title: "Re:Zero kara Hajimeru Isekai Seikatsu", type: "romaji" },
+          { iso_3166_1: "MX", title: "Re:Zero", type: "" }
+        ] }) };
+      }
+      if (/\/movie\/2\/alternative_titles/.test(url)) {
+        return { ok: true, json: async () => ({ titles: [
+          { iso_3166_1: "US", title: "A Movie", type: "" }
+        ] }) };
+      }
+      throw new Error("URL inesperada: " + url);
+    };
+    const tmdb = await import("../app/tmdb.js?alttitles1");
+    assert.deepEqual(await tmdb.getAlternativeTitles(1, "tv"), [
+      { country: "JP", title: "ReZero kara Hajimeru Isekai Seikatsu", type: "romanization" },
+      { country: "JP", title: "Re:Zero kara Hajimeru Isekai Seikatsu", type: "romaji" },
+      { country: "MX", title: "Re:Zero", type: "" }
+    ]);
+    assert.deepEqual(await tmdb.getAlternativeTitles(2, "movie"), [
+      { country: "US", title: "A Movie", type: "" }
+    ]);
+  });
+
   it("getSeasonEpisodes devuelve número/nombre/fecha de emisión", async () => {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({ episodes: [
       { episode_number: 1, name: "Ep 1", air_date: "2016-04-04" },

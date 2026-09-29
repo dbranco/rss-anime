@@ -2,6 +2,7 @@
 // usuario en pista SUB), resuelto de forma perezosa y cacheado en item.players. Plan A no
 // implementa la cascada completa de idioma/pista/sitio con memoria — eso es Plan B.
 import * as engine from "../engine.js";
+import * as tmdb from "../tmdb.js";
 import { get } from "../store.js";
 import { mutate } from "../list.js";
 import { btn, explain } from "./dom.js";
@@ -14,10 +15,26 @@ async function firstRule(lang) {
   return entry || null;
 }
 
+// Tercer y último intento: el título "romaji"/"romanization" que TMDB recoge para el país de
+// origen de la serie (ej. Japón para anime) — muchos sitios de streaming titulan sus posts así
+// en vez de con el original en kanji o el traducido. Solo aplica a tv (origin_country no existe
+// en movie). Devuelve null si no hay país de origen o no hay ningún título de ese tipo.
+async function originRomajiTitle(item, lang) {
+  try {
+    const show = await tmdb.getShow(item.tmdb_id, item.media_type, lang);
+    if (!show.origin_country) return null;
+    const alts = await tmdb.getAlternativeTitles(item.tmdb_id, item.media_type);
+    const forCountry = alts.filter(a => a.country === show.origin_country);
+    const romaji = forCountry.find(a => /romaji|romanization/i.test(a.type));
+    return (romaji || forCountry[0])?.title || null;
+  } catch { return null; } // sin conexión/HTTP error: no bloquea el flujo, simplemente no hay 3er intento
+}
+
 // Busca el slug de `item.title` en el sitio de `entry.rule`, deja elegir el resultado correcto,
 // y lo cachea en item.players["lang|sub"]. Si ya había algo cacheado para ese sitio, lo usa
 // directo sin volver a buscar. Si el título traducido de TMDB no da resultados, reintenta con
-// el original_title (el sitio puede indexar por el título japonés/original en vez del traducido).
+// el original_title (el sitio puede indexar por el título japonés/original en vez del traducido),
+// y si eso tampoco encuentra nada, con el título romaji del país de origen (originRomajiTitle).
 async function resolveSlug(item, lang, entry, box) {
   const cacheKey = `${lang}|sub`;
   const cached = item.players?.[cacheKey];
@@ -28,10 +45,20 @@ async function resolveSlug(item, lang, entry, box) {
   let results;
   try { results = await engine.search(entry.rule, item.title); }
   catch (e) { box.textContent = "Error: " + explain(e); return null; }
-  if (!results.length && item.original_title && item.original_title !== item.title) {
+  const tried = new Set([item.title]);
+  if (!results.length && item.original_title && !tried.has(item.original_title)) {
+    tried.add(item.original_title);
     box.textContent = "Sin resultados con \"" + item.title + "\", reintentando con \"" + item.original_title + "\"…";
     try { results = await engine.search(entry.rule, item.original_title); }
     catch (e) { box.textContent = "Error: " + explain(e); return null; }
+  }
+  if (!results.length) {
+    const romaji = await originRomajiTitle(item, lang);
+    if (romaji && !tried.has(romaji)) {
+      box.textContent = "Sin resultados, reintentando con \"" + romaji + "\"…";
+      try { results = await engine.search(entry.rule, romaji); }
+      catch (e) { box.textContent = "Error: " + explain(e); return null; }
+    }
   }
   if (!results.length) { box.textContent = "Sin resultados en " + entry.id; return null; }
 

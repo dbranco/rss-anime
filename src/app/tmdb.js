@@ -52,9 +52,22 @@ export async function getShow(tmdbId, mediaType, lang) {
     title: j.title || j.name,
     original_title: j.original_name || j.original_title || null,
     poster_path: j.poster_path || null,
+    // TMDB solo expone origin_country en tv (no en movie). Es el tercer y último intento de
+    // búsqueda en un sitio de reproducción (ver resolve.js): con ese país se busca en
+    // getAlternativeTitles() un título "romaji"/"romanization" — el que muchos sitios de anime
+    // usan en vez del original en kanji o el traducido.
+    origin_country: mediaType === "tv" ? (j.origin_country?.[0] || null) : null,
     // Solo temporadas reales (la 0 de TMDB son especiales/OVAs, no cuentan para el flujo normal).
     seasons: mediaType === "tv" ? (j.seasons || []).map(s => s.season_number).filter(n => n > 0) : null
   };
+}
+
+// Títulos alternativos por país que TMDB recopila para esta serie/película (ver resolve.js:
+// tercer intento de búsqueda, cuando el título traducido y el original no dan resultados).
+export async function getAlternativeTitles(tmdbId, mediaType) {
+  const j = await call(`/${mediaType}/${tmdbId}/alternative_titles`);
+  const list = mediaType === "movie" ? j.titles : j.results;
+  return (list || []).map(t => ({ country: t.iso_3166_1, title: t.title, type: t.type || "" }));
 }
 
 // Episodios de una temporada, con fecha de emisión (para saber si "ya salió"). Solo aplica a

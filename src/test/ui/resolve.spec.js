@@ -99,6 +99,48 @@ describe("ui/resolve: resolveAndPlay / resolveSlug", () => {
     assert.ok(box.querySelector("select"), "resolvió el player tras el reintento");
   });
 
+  it("sin resultados con title ni original_title, pero sí con el título romaji de TMDB → reintenta y resuelve", async () => {
+    const { store, resolve } = await load();
+    const list = await import(`../../app/list.js?resolve${n}`);
+    await store.set("players", { "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }], dub: [] } });
+    await store.set("tmdb_key", "test-key");
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url);
+      if (u.includes("api.themoviedb.org")) {
+        if (u.includes("/tv/5/alternative_titles")) {
+          return { ok: true, json: async () => ({ results: [
+            { iso_3166_1: "JP", title: "No coincide con el catálogo", type: "" },
+            { iso_3166_1: "JP", title: "Re:Zero", type: "romaji" }
+          ] }) };
+        }
+        if (u.includes("/tv/5")) return { ok: true, json: async () => ({ name: "Título que no existe", origin_country: ["JP"] }) };
+        throw new Error("URL TMDB inesperada: " + u);
+      }
+      return realFetch(url, opts);
+    };
+
+    try {
+      const item = {
+        tmdb_id: 5, media_type: "tv", title: "Título que no existe en el catálogo",
+        original_title: "Tampoco existe este título", poster_path: null, players: {}
+      };
+      await list.add(item);
+
+      const box = dom.window.document.getElementById("playerBox");
+      const done = resolve.resolveAndPlay(item, 3, box);
+
+      await waitFor(() => box.querySelector("button"));
+      const options = [...box.querySelectorAll("button")];
+      assert.equal(options.length, 1, "el reintento con el título romaji de TMDB encontró un resultado");
+      options[0].onclick();
+
+      await done;
+      assert.ok(box.querySelector("select"), "resolvió el player tras el 3er intento (romaji)");
+    } finally { globalThis.fetch = realFetch; }
+  });
+
   it("con slug ya cacheado en item.players → no vuelve a buscar (usa el slug directo)", async () => {
     const { store, resolve } = await load();
     await store.set("players", { "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }], dub: [] } });
