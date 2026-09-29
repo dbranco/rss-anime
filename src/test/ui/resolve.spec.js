@@ -155,6 +155,59 @@ describe("ui/resolve: resolveAndPlay / resolveSlug", () => {
     assert.ok(box.querySelector("select"), "fue directo a episodePlayers con el slug cacheado, sin buscar");
   });
 
+  it("item.player_pref.track='dub' usa la caché de dub, no la de sub", async () => {
+    const { store, resolve } = await load();
+    await store.set("players", {
+      "es-ES": {
+        sub: [{ id: providerRule.id, rule: providerRule }],
+        dub: [{ id: "mock-dub", rule: { ...providerRule, id: "mock-dub" } }]
+      }
+    });
+    // Título que el catálogo del mock no encontraría — si resolveSlug usara la clave "es-ES|sub"
+    // (o buscara en vez de usar la caché), esto no terminaría en el player.
+    const item = {
+      tmdb_id: 7, title: "Título que no existe en el catálogo",
+      player_pref: { track: "dub" },
+      players: { "es-ES|dub": { providerId: "mock-dub", slug: "re-zero" } }
+    };
+    const box = dom.window.document.getElementById("playerBox");
+    await resolve.resolveAndPlay(item, 1, box);
+    assert.ok(box.querySelector("select"), "usó el slug cacheado bajo la clave 'es-ES|dub'");
+  });
+
+  it("con varios proveedores para el mismo lang+track, usa el que indica item.player_pref.providerId", async () => {
+    const { store, resolve } = await load();
+    const otherRule = { ...providerRule, id: "mock-other" };
+    await store.set("players", {
+      "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }, { id: otherRule.id, rule: otherRule }], dub: [] }
+    });
+    // Cacheado bajo "mock-other": si chosenRule() devolviera el primer proveedor (providerRule,
+    // id "mock") en vez de respetar player_pref.providerId, el chequeo de caché de resolveSlug
+    // (cached.providerId === entry.id) fallaría y volvería a buscar — y sin resultados, no
+    // llegaría a mostrar el player.
+    const item = {
+      tmdb_id: 8, title: "Título que no existe en el catálogo",
+      player_pref: { providerId: "mock-other" },
+      players: { "es-ES|sub": { providerId: "mock-other", slug: "re-zero" } }
+    };
+    const box = dom.window.document.getElementById("playerBox");
+    await resolve.resolveAndPlay(item, 1, box);
+    assert.ok(box.querySelector("select"), "resolvió usando el proveedor cacheado (mock-other), no el primero");
+  });
+
+  it("player_pref.providerId apunta a un proveedor que ya no existe → cae al primero configurado", async () => {
+    const { store, resolve } = await load();
+    await store.set("players", { "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }], dub: [] } });
+    const item = {
+      tmdb_id: 9, title: "Título que no existe en el catálogo",
+      player_pref: { providerId: "no-existe-ya" },
+      players: { "es-ES|sub": { providerId: providerRule.id, slug: "re-zero" } }
+    };
+    const box = dom.window.document.getElementById("playerBox");
+    await resolve.resolveAndPlay(item, 1, box);
+    assert.ok(box.querySelector("select"), "cayó al primer proveedor configurado y usó su slug cacheado");
+  });
+
   it("provider con episode.embed_blocked → enlace 'abrir en pestaña nueva' en vez de iframe", async () => {
     const { store, resolve } = await load();
     const blockedRule = { ...providerRule, episode: { ...providerRule.episode, embed_blocked: true } };
