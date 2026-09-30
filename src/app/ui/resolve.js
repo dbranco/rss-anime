@@ -91,6 +91,7 @@ export async function resolveAndPlay(item, episode, playerBox) {
   try {
     const players = await engine.episodePlayers(entry.rule, slug, episode);
     renderPlayerPicker(playerBox, players, {
+      track: track.toUpperCase(),
       embedBlocked: !!entry.rule.episode?.embed_blocked,
       episodeUrl: engine.episodeUrl(entry.rule, slug, episode)
     });

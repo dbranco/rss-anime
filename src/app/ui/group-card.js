@@ -133,7 +133,7 @@ export function groupCard(g, watchlist, owned, onChange) {
         el("div", { textContent:
           `Paso ${g.steps.indexOf(cur.step) + 1} de ${g.steps.length}: ` +
           `${cur.item ? cur.item.title : cur.step.tmdb_id} — episodio ${cur.next}` }),
-        cur.item ? renderPlayerPrefSelectors(cur.item, onChange) : "",
+        cur.item ? renderPlayerPrefSelectors(cur.item) : "",
         cur.item
           ? el("div", { className: "actions" },
               btn("Visto", () => onMark(cur.step, cur.next)))

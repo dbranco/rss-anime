@@ -5,6 +5,8 @@ import { resolveAndPlay } from "./resolve.js";
 
 // Panel de acción de un episodio de una media suelta (no de grupo): marcar/desmarcar visto,
 // o verlo aquí con un servidor embebible (resolución perezosa, ver resolve.js).
+// Sin botón "Cerrar": tocar de nuevo el badge del episodio ya abierto lo cierra (ver su onclick
+// en list-item.js), así que un botón aparte para lo mismo era redundante.
 export function renderItemEpisodePanel(item, episode, seen, onChange) {
   const playerBox = el("div", {});
   return el("div", { className: "card" },
@@ -17,8 +19,7 @@ export function renderItemEpisodePanel(item, episode, seen, onChange) {
         seen
           ? btn("Desmarcar", async () => { const u = await mutate(item.tmdb_id, x => { x.last = Math.min(x.last || 0, episode - 1); }); if (u) Object.assign(item, u); onChange(); })
           : btn("Marcar visto", async () => { const u = await mutate(item.tmdb_id, x => { x.last = Math.max(x.last || 0, episode); }); if (u) Object.assign(item, u); onChange(); }),
-        btn("▶ Ver aquí", () => resolveAndPlay(item, episode, playerBox)),
-        btn("Cerrar", () => onChange(true))),
+        btn("▶ Ver aquí", () => resolveAndPlay(item, episode, playerBox))),
       playerBox));
 }
 
@@ -33,7 +34,6 @@ export function renderEpisodePanel(sel, onChange) {
           ? btn("Desmarcar", async () => { await groups.unmarkFrom(sel.step, sel.episode); onChange(true); })
           : btn("Marcar visto", async () => { await groups.markUpTo(sel.step, sel.episode); onChange(true); }),
         // Sin item (el paso apunta a algo que ya no está en watchlist) no hay nada que resolver.
-        sel.item ? btn("▶ Ver aquí", () => resolveAndPlay(sel.item, sel.episode, playerBox)) : "",
-        btn("Cerrar", () => onChange(true))),
+        sel.item ? btn("▶ Ver aquí", () => resolveAndPlay(sel.item, sel.episode, playerBox)) : ""),
       playerBox));
 }

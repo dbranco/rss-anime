@@ -20,6 +20,11 @@ input, select, button, textarea {
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   background: transparent; color: inherit; width: 100%;
 }
+/* El popup nativo de <option> no hereda el "transparent"/"inherit" de arriba: lo pinta con su
+   propio fondo de ventana del SO, que en un tema oscuro puede ser claro mientras el texto sigue
+   heredando un color claro — quedan invisibles hasta el hover (que sí fuerza su propio contraste).
+   Canvas/CanvasText son los colores de sistema para ese popup, así que siempre contrastan. */
+select option { background: Canvas; color: CanvasText; }
 button { cursor: pointer; background: color-mix(in srgb, currentColor 8%, transparent); }
 button.small { width: auto; padding: 6px 10px; font-size: .85rem; }
 button.link { width: auto; background: none; border: none; text-decoration: underline; padding: 4px; }

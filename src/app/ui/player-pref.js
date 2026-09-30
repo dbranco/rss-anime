@@ -13,7 +13,12 @@ import { requestSync } from "./sync.js";
 // Devuelve el <div> contenedor de inmediato (síncrono) y lo rellena tras el await — mismo patrón
 // que ya usa list-item.js para "Episodios" (evita que itemCard()/groupCard() tengan que volverse
 // async, lo que rompería a sus propios llamadores).
-export function renderPlayerPrefSelectors(item, onChange) {
+//
+// No dispara un re-render completo de la tarjeta/lista al cambiar: los <select> ya reflejan su
+// propio estado en el DOM y item.player_pref queda actualizado in-place (Object.assign), que es
+// todo lo que resolveAndPlay necesita leer más tarde. Repintar todo aquí cerraría cualquier panel
+// de episodio que estuviera abierto en la misma tarjeta sin motivo.
+export function renderPlayerPrefSelectors(item) {
   const box = el("div", { className: "row" });
 
   (async () => {
@@ -50,7 +55,6 @@ export function renderPlayerPrefSelectors(item, onChange) {
       const next = { lang: langSel.value, track: trackSel.value, providerId: providerSel.value };
       const updated = await mutate(item.tmdb_id, x => { x.player_pref = next; });
       if (updated) Object.assign(item, updated);
-      onChange();
       // Fire-and-forget, igual que list-item.js/group-card.js: no se espera (no cambiar el
       // timing de persist()), pero se atrapa el rechazo para no dejar una promesa rechazada
       // sin manejar cuando no hay sesión iniciada o falla la red.

@@ -24,7 +24,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
     item.poster_path ? el("img", { src: safe(tmdb.posterUrl(item.poster_path)) }) : "",
     el("div", { className: "body" },
       el("b", { textContent: item.title }),
-      renderPlayerPrefSelectors(item, onChange),
+      renderPlayerPrefSelectors(item),
       el("div", { className: "st", textContent: "Visto hasta el episodio " + (item.last || 0) }),
       el("div", { className: "actions" },
         btn("Episodios", async () => {
@@ -51,10 +51,7 @@ export function itemCard(item, myGroups, subGroups, onChange) {
                   badge.onclick = () => { epsSel.set(item.tmdb_id, sel === e.number ? null : e.number); renderEps(); };
                   return badge;
                 }) : ["Sin episodios"]),
-                sel != null ? renderItemEpisodePanel(item, sel, sel <= (item.last || 0), close => {
-                  if (close) epsSel.delete(item.tmdb_id);
-                  renderEps();
-                }) : "");
+                sel != null ? renderItemEpisodePanel(item, sel, sel <= (item.last || 0), renderEps) : "");
             };
             renderEps();
           } catch (e) { eps.textContent = "Error: " + explain(e); }
