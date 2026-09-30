@@ -2,6 +2,7 @@ import { get } from "../store.js";
 import { mutate } from "../list.js";
 import { el } from "./dom.js";
 import { requestSync } from "./sync.js";
+import { refreshOpenPlayer } from "./resolve.js";
 
 // Selectores encadenados idioma → pista → proveedor para elegir, por ítem, qué combinación de
 // app_config.players usar en "Ver aquí" (ver resolve.js). Solo lista combinaciones que existen
@@ -17,7 +18,9 @@ import { requestSync } from "./sync.js";
 // No dispara un re-render completo de la tarjeta/lista al cambiar: los <select> ya reflejan su
 // propio estado en el DOM y item.player_pref queda actualizado in-place (Object.assign), que es
 // todo lo que resolveAndPlay necesita leer más tarde. Repintar todo aquí cerraría cualquier panel
-// de episodio que estuviera abierto en la misma tarjeta sin motivo.
+// de episodio que estuviera abierto en la misma tarjeta sin motivo. Si ese panel ya tenía un
+// "Ver aquí" resuelto, sí se refresca (ver refreshOpenPlayer en resolve.js) para que no se quede
+// mostrando servidores de la combinación vieja.
 export function renderPlayerPrefSelectors(item) {
   const box = el("div", { className: "row" });
 
@@ -55,6 +58,9 @@ export function renderPlayerPrefSelectors(item) {
       const next = { lang: langSel.value, track: trackSel.value, providerId: providerSel.value };
       const updated = await mutate(item.tmdb_id, x => { x.player_pref = next; });
       if (updated) Object.assign(item, updated);
+      // Si ya había un "Ver aquí" abierto para este ítem, refréscalo con la combinación nueva en
+      // vez de dejarlo mostrando servidores de la anterior hasta que lo cierren y reabran a mano.
+      refreshOpenPlayer(item);
       // Fire-and-forget, igual que list-item.js/group-card.js: no se espera (no cambiar el
       // timing de persist()), pero se atrapa el rechazo para no dejar una promesa rechazada
       // sin manejar cuando no hay sesión iniciada o falla la red.

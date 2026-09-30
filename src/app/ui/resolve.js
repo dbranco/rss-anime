@@ -10,6 +10,11 @@ import { btn, explain } from "./dom.js";
 import { ensurePermissions } from "./permissions.js";
 import { renderPlayerPicker } from "./player.js";
 
+// tmdb_id -> { episode, box } del último "Ver aquí" abierto para ese ítem, para poder refrescarlo
+// (refreshOpenPlayer) cuando player-pref.js persiste un cambio de idioma/pista/proveedor sin
+// tener que rastrear la identidad del objeto `item` (ver comentario sobre eso en group-card.js).
+const openPlayers = new Map();
+
 const chosenTrack = item => item.player_pref?.track || "sub";
 const chosenLang = async item => item.player_pref?.lang || await get("lang_pref", "es-ES");
 
@@ -78,6 +83,7 @@ async function resolveSlug(item, lang, track, entry, box) {
 }
 
 export async function resolveAndPlay(item, episode, playerBox) {
+  openPlayers.set(item.tmdb_id, { episode, box: playerBox });
   const lang = await chosenLang(item);
   const track = chosenTrack(item);
   const entry = await chosenRule(item, lang, track);
@@ -96,4 +102,15 @@ export async function resolveAndPlay(item, episode, playerBox) {
       episodeUrl: engine.episodeUrl(entry.rule, slug, episode)
     });
   } catch (e) { playerBox.textContent = "Error: " + explain(e); }
+}
+
+// Vuelve a resolver un "Ver aquí" ya abierto para este ítem (mismo episodio, playerBox todavía en
+// el DOM) tras un cambio de idioma/pista/proveedor en player-pref.js — si no, el panel se quedaba
+// mostrando servidores de la combinación vieja hasta cerrarlo y volver a abrirlo a mano.
+// No-op si nunca se abrió "Ver aquí" para este ítem, o si el panel ya se cerró mientras tanto.
+export function refreshOpenPlayer(item) {
+  const entry = openPlayers.get(item.tmdb_id);
+  if (!entry) return;
+  if (!entry.box.isConnected) { openPlayers.delete(item.tmdb_id); return; }
+  resolveAndPlay(item, entry.episode, entry.box);
 }
