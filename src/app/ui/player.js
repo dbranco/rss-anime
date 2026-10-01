@@ -1,4 +1,5 @@
 import { el, link } from "./dom.js";
+import { holdWakeLockWhileConnected } from "./wake-lock.js";
 
 // Botones de servidor; al elegir uno, embebe su iframe debajo (o, si el provider declara
 // embed_blocked, muestra un enlace a la página del episodio en el sitio original en vez de al
@@ -24,9 +25,13 @@ export function renderPlayerPicker(box, players, { track = "SUB", embedBlocked =
 
   const loadFrame = () => {
     const s = players[chosenTrack][serverSel.selectedIndex];
-    frame.replaceChildren(embedBlocked
-      ? link(episodeUrl || s.url, "▶ Abrir en pestaña nueva")
-      : el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" }));
+    if (embedBlocked) { frame.replaceChildren(link(episodeUrl || s.url, "▶ Abrir en pestaña nueva")); return; }
+    const iframe = el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" });
+    frame.replaceChildren(iframe);
+    // Sin esto, el móvil bloquea la pantalla a los pocos segundos como si no hubiera nada
+    // reproduciéndose (el iframe es cross-origin, no hay forma de saber si su video está en
+    // play), y hay que ir tocando la pantalla a mano para que no se apague.
+    holdWakeLockWhileConnected(iframe);
   };
   serverSel.replaceChildren(...players[chosenTrack].map(s => el("option", { value: s.server, textContent: s.server })));
   serverSel.onchange = loadFrame;
