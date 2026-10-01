@@ -1,5 +1,5 @@
 import { el, link } from "./dom.js";
-import { holdWakeLockWhileConnected } from "./wake-lock.js";
+import { holdWakeLockWhileConnected, requestWakeLock, releaseWakeLock } from "./wake-lock.js";
 
 // Botones de servidor; al elegir uno, embebe su iframe debajo (o, si el provider declara
 // embed_blocked, muestra un enlace a la página del episodio en el sitio original en vez de al
@@ -27,10 +27,25 @@ export function renderPlayerPicker(box, players, { track = "SUB", embedBlocked =
     const s = players[chosenTrack][serverSel.selectedIndex];
     if (embedBlocked) { frame.replaceChildren(link(episodeUrl || s.url, "▶ Abrir en pestaña nueva")); return; }
     const iframe = el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" });
-    frame.replaceChildren(iframe);
+
+    // El wake lock se pide a ciegas (ver comentario de wake-lock.js: no hay forma de leer el
+    // play/pause real del iframe cross-origin), así que este botón superpuesto deja al usuario
+    // corregirlo a mano — ej. soltarlo si pausa el video adentro, para que la pantalla sí pueda
+    // bloquearse mientras no está mirando.
+    let awake = true;
+    const wakeBtn = el("button", { className: "wake-toggle", type: "button" });
+    const syncWakeBtn = () => {
+      wakeBtn.textContent = awake ? "🔒" : "🔓";
+      wakeBtn.title = awake
+        ? "Pantalla fija mientras ves esto — toca para dejar que se bloquee"
+        : "Pantalla puede bloquearse — toca para mantenerla encendida";
+    };
+    wakeBtn.onclick = () => { awake = !awake; (awake ? requestWakeLock : releaseWakeLock)(); syncWakeBtn(); };
+    syncWakeBtn();
+
+    frame.replaceChildren(el("div", { className: "player-wrap" }, iframe, wakeBtn));
     // Sin esto, el móvil bloquea la pantalla a los pocos segundos como si no hubiera nada
-    // reproduciéndose (el iframe es cross-origin, no hay forma de saber si su video está en
-    // play), y hay que ir tocando la pantalla a mano para que no se apague.
+    // reproduciéndose, y hay que ir tocando la pantalla a mano para que no se apague.
     holdWakeLockWhileConnected(iframe);
   };
   serverSel.replaceChildren(...players[chosenTrack].map(s => el("option", { value: s.server, textContent: s.server })));

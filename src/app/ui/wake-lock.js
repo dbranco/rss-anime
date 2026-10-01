@@ -15,7 +15,15 @@ async function acquire() {
   } catch { /* permiso denegado, sin pestaña visible, etc. — sin esto no hay más que tapping manual */ }
 }
 
-function release() {
+// Exportadas para el botón de pantalla-encendida/apagable de player.js: deja al usuario soltar el
+// lock a mano (ej. si pausa el video dentro del iframe, algo que no podemos detectar nosotros) y
+// volver a pedirlo sin tener que cerrar y reabrir el panel.
+export function requestWakeLock() {
+  active = true;
+  if (!sentinel) acquire();
+}
+
+export function releaseWakeLock() {
   active = false;
   const s = sentinel;
   sentinel = null;
@@ -30,16 +38,15 @@ document.addEventListener("visibilitychange", () => {
 // usuario cierra el panel, cambia de servidor/pista, o abre otro episodio — todos esos casos
 // desmontan el iframe vía replaceChildren en algún padre, nunca un evento explícito de "cerrar").
 export function holdWakeLockWhileConnected(el) {
-  release(); // solo un iframe reproduce a la vez en esta app: suelta cualquier lock anterior
-  active = true;
-  acquire();
+  releaseWakeLock(); // solo un iframe reproduce a la vez en esta app: suelta cualquier lock anterior
+  requestWakeLock();
   // Sin MutationObserver (entorno de test con jsdom pelado, sin este global) no hay forma de
   // detectar el desmontaje — el lock se queda activo hasta que otro holdWakeLockWhileConnected()
   // lo reemplace, en vez de soltarse solo al cerrar el panel. Degradación aceptable: en un
   // navegador real MutationObserver siempre existe.
   if (typeof MutationObserver === "undefined") return;
   const obs = new MutationObserver(() => {
-    if (!el.isConnected) { obs.disconnect(); release(); }
+    if (!el.isConnected) { obs.disconnect(); releaseWakeLock(); }
   });
   obs.observe(document.body, { childList: true, subtree: true });
 }
