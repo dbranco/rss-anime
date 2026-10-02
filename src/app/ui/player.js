@@ -1,4 +1,4 @@
-import { el, link } from "./dom.js";
+import { el, link, btn } from "./dom.js";
 import { holdWakeLockWhileConnected, requestWakeLock, releaseWakeLock } from "./wake-lock.js";
 
 // Botones de servidor; al elegir uno, embebe su iframe debajo (o, si el provider declara
@@ -23,34 +23,35 @@ export function renderPlayerPicker(box, players, { track = "SUB", embedBlocked =
   const serverSel = el("select", {});
   const frame = el("div", {});
 
+  // El wake lock se pide a ciegas (no hay forma de leer el play/pause real de un iframe
+  // cross-origin, ver wake-lock.js), así que este botón deja al usuario corregirlo a mano — ej.
+  // soltarlo si pausa el video adentro, para que la pantalla sí pueda bloquearse mientras no está
+  // mirando. Fuera del iframe (no superpuesto): un botón flotando encima de los controles propios
+  // del player (play/pause/volumen/pantalla completa) estorbaba para usarlos.
+  let awake = true;
+  const wakeBtn = btn("", () => { awake = !awake; (awake ? requestWakeLock : releaseWakeLock)(); syncWakeBtn(); });
+  const syncWakeBtn = () => {
+    wakeBtn.textContent = awake ? "🔒 Pantalla fija" : "🔓 Pantalla libre";
+    wakeBtn.title = awake
+      ? "Manteniendo la pantalla encendida — toca para dejar que se bloquee"
+      : "La pantalla puede bloquearse — toca para mantenerla encendida";
+  };
+
   const loadFrame = () => {
     const s = players[chosenTrack][serverSel.selectedIndex];
     if (embedBlocked) { frame.replaceChildren(link(episodeUrl || s.url, "▶ Abrir en pestaña nueva")); return; }
     const iframe = el("iframe", { src: s.url, className: "player-frame", allow: "autoplay; fullscreen" });
-
-    // El wake lock se pide a ciegas (ver comentario de wake-lock.js: no hay forma de leer el
-    // play/pause real del iframe cross-origin), así que este botón superpuesto deja al usuario
-    // corregirlo a mano — ej. soltarlo si pausa el video adentro, para que la pantalla sí pueda
-    // bloquearse mientras no está mirando.
-    let awake = true;
-    const wakeBtn = el("button", { className: "wake-toggle", type: "button" });
-    const syncWakeBtn = () => {
-      wakeBtn.textContent = awake ? "🔒" : "🔓";
-      wakeBtn.title = awake
-        ? "Pantalla fija mientras ves esto — toca para dejar que se bloquee"
-        : "Pantalla puede bloquearse — toca para mantenerla encendida";
-    };
-    wakeBtn.onclick = () => { awake = !awake; (awake ? requestWakeLock : releaseWakeLock)(); syncWakeBtn(); };
-    syncWakeBtn();
-
-    frame.replaceChildren(el("div", { className: "player-wrap" }, iframe, wakeBtn));
+    frame.replaceChildren(iframe);
     // Sin esto, el móvil bloquea la pantalla a los pocos segundos como si no hubiera nada
     // reproduciéndose, y hay que ir tocando la pantalla a mano para que no se apague.
+    awake = true;
+    syncWakeBtn();
     holdWakeLockWhileConnected(iframe);
   };
   serverSel.replaceChildren(...players[chosenTrack].map(s => el("option", { value: s.server, textContent: s.server })));
   serverSel.onchange = loadFrame;
+  syncWakeBtn();
   loadFrame(); // carga el primer servidor de la pista elegida sin esperar un clic más
 
-  box.replaceChildren(serverSel, frame);
+  box.replaceChildren(el("div", { className: "row" }, serverSel, embedBlocked ? "" : wakeBtn), frame);
 }
