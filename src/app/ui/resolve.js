@@ -6,7 +6,7 @@ import * as engine from "../engine.js";
 import * as tmdb from "../tmdb.js";
 import { get } from "../store.js";
 import { mutate } from "../list.js";
-import { btn, explain } from "./dom.js";
+import { el, btn, explain } from "./dom.js";
 import { ensurePermissions } from "./permissions.js";
 import { renderPlayerPicker } from "./player.js";
 
@@ -40,16 +40,14 @@ async function originRomajiTitle(item, lang) {
   } catch { return null; } // sin conexión/HTTP error: no bloquea el flujo, simplemente no hay 3er intento
 }
 
-// Busca el slug de `item.title` en el sitio de `entry.rule`, deja elegir el resultado correcto,
-// y lo cachea en item.players["<lang>|<track>"]. Si ya había algo cacheado para esa combinación
-// y ese proveedor, lo usa directo sin volver a buscar. Si el título traducido de TMDB no da
-// resultados, reintenta con el original_title, y si eso tampoco encuentra nada, con el título
-// romaji del país de origen (originRomajiTitle).
-async function resolveSlug(item, lang, track, entry, box) {
+// Busca `item.title` en el sitio de `entry.rule` y deja elegir el resultado correcto (cacheándolo
+// en item.players["<lang>|<track>"] al elegir). Si el título traducido de TMDB no da resultados,
+// reintenta con el original_title, y si eso tampoco encuentra nada, con el título romaji del país
+// de origen (originRomajiTitle). Siempre busca de cero — para la variante que primero mira la
+// caché, ver resolveSlug más abajo (la usa resolveAndPlay en el primer intento; esta la usa el
+// botón "Probar con otro resultado" cuando el slug cacheado resultó ser el título equivocado).
+async function searchAndPick(item, lang, track, entry, box) {
   const cacheKey = `${lang}|${track}`;
-  const cached = item.players?.[cacheKey];
-  if (cached && cached.providerId === entry.id) return cached.slug;
-
   await ensurePermissions();
   box.textContent = "Buscando en " + entry.id + "…";
   let results;
@@ -82,6 +80,15 @@ async function resolveSlug(item, lang, track, entry, box) {
   });
 }
 
+// Si ya había un slug cacheado para esta combinación lang|track con este mismo proveedor, lo usa
+// directo sin volver a buscar; si no, delega en searchAndPick.
+async function resolveSlug(item, lang, track, entry, box) {
+  const cacheKey = `${lang}|${track}`;
+  const cached = item.players?.[cacheKey];
+  if (cached && cached.providerId === entry.id) return cached.slug;
+  return searchAndPick(item, lang, track, entry, box);
+}
+
 export async function resolveAndPlay(item, episode, playerBox) {
   openPlayers.set(item.tmdb_id, { episode, box: playerBox });
   const lang = await chosenLang(item);
@@ -89,19 +96,41 @@ export async function resolveAndPlay(item, episode, playerBox) {
   const entry = await chosenRule(item, lang, track);
   if (!entry) { playerBox.textContent = `No hay ningún sitio de reproducción configurado para "${lang}" (${track}).`; return; }
 
-  const slug = await resolveSlug(item, lang, track, entry, playerBox);
+  await playEpisode(item, episode, lang, track, entry, playerBox, false);
+}
+
+// `forceSearch`: true cuando viene del botón "Probar con otro resultado" — el slug cacheado
+// resultó apuntar a un título equivocado (ej. buscaste "Black Clover", el provider portugués
+// devolvió varios resultados, elegiste uno pero resultó no tener el episodio), así que hay que
+// ignorar la caché y dejar elegir otra vez entre los resultados de la búsqueda, en vez de quedarse
+// repitiendo para siempre el mismo slug que no tiene servidores.
+async function playEpisode(item, episode, lang, track, entry, box, forceSearch) {
+  const slug = forceSearch
+    ? await searchAndPick(item, lang, track, entry, box)
+    : await resolveSlug(item, lang, track, entry, box);
   if (!slug) return;
 
   await ensurePermissions();
-  playerBox.textContent = "Buscando servidores…";
+  box.textContent = "Buscando servidores…";
+  const retry = () => playEpisode(item, episode, lang, track, entry, box, true);
+  let players;
   try {
-    const players = await engine.episodePlayers(entry.rule, slug, episode);
-    renderPlayerPicker(playerBox, players, {
-      track: track.toUpperCase(),
-      embedBlocked: !!entry.rule.episode?.embed_blocked,
-      episodeUrl: engine.episodeUrl(entry.rule, slug, episode)
-    });
-  } catch (e) { playerBox.textContent = "Error: " + explain(e); }
+    players = await engine.episodePlayers(entry.rule, slug, episode);
+  } catch (e) {
+    box.replaceChildren(el("div", { textContent: "Error: " + explain(e) }), btn("🔁 Probar con otro resultado", retry));
+    return;
+  }
+  if (!players || (!players.SUB.length && !players.DUB.length)) {
+    box.replaceChildren(
+      el("div", { textContent: `"${item.title}" no tiene servidores en ${entry.id} para este resultado — puede que el título elegido no fuera el correcto.` }),
+      btn("🔁 Probar con otro resultado", retry));
+    return;
+  }
+  renderPlayerPicker(box, players, {
+    track: track.toUpperCase(),
+    embedBlocked: !!entry.rule.episode?.embed_blocked,
+    episodeUrl: engine.episodeUrl(entry.rule, slug, episode)
+  });
 }
 
 // Vuelve a resolver un "Ver aquí" ya abierto para este ítem (mismo episodio, playerBox todavía en

@@ -228,4 +228,36 @@ describe("ui/resolve: resolveAndPlay / resolveSlug", () => {
     // directo a ese servidor si no detectan que viene de una página de su propio dominio.
     assert.equal(a.href, "http://127.0.0.1:8001/blabla/re-zero/1");
   });
+
+  it('slug cacheado sin servidores (título equivocado) → ofrece "Probar con otro resultado" y, al elegir otro, resuelve', async () => {
+    const { store, resolve } = await load();
+    const list = await import(`../../app/list.js?resolve${n}`);
+    await store.set("players", { "es-ES": { sub: [{ id: providerRule.id, rule: providerRule }], dub: [] } });
+    // "no-existe" no es ninguna de las series del mock: episodePlayers() no encontrará embeds y
+    // devolverá null, igual que pasaría en producción si el resultado elegido en la búsqueda
+    // (ej. en un provider portugués) no era en realidad la serie buscada.
+    const item = {
+      tmdb_id: 10, title: "Re:Zero",
+      players: { "es-ES|sub": { providerId: providerRule.id, slug: "no-existe" } }
+    };
+    await list.add(item);
+
+    const box = dom.window.document.getElementById("playerBox");
+    await resolve.resolveAndPlay(item, 1, box);
+    assert.match(box.textContent, /no tiene servidores/, "avisa que el slug cacheado no tiene servidores");
+    const retryBtn = [...box.querySelectorAll("button")].find(b => b.textContent.includes("Probar con otro resultado"));
+    assert.ok(retryBtn, "ofrece un botón para reintentar con otro resultado en vez de dejar un callejón sin salida");
+
+    retryBtn.onclick(); // dom.js#btn() asigna onclick como propiedad, no via addEventListener
+    await waitFor(() => box.querySelector("button")?.textContent === "Re:Zero");
+    const options = [...box.querySelectorAll("button")];
+    assert.equal(options.length, 1, "vuelve a buscar de cero (ignorando la caché) y expone resultados para elegir");
+    options[0].onclick();
+
+    await waitFor(() => box.querySelector("select"));
+    const watchlist = await store.get("watchlist", []);
+    const saved = watchlist.find(w => w.tmdb_id === 10);
+    assert.deepEqual(saved.players["es-ES|sub"], { providerId: providerRule.id, slug: "re-zero" },
+      "sobreescribe el slug cacheado malo con el nuevo elegido");
+  });
 });
